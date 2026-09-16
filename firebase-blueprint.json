@@ -1,0 +1,51 @@
+{
+  "collections": {
+    "users": {
+      "__description": "User profiles and quota wallets.",
+      "__fields": {
+        "email": "string",
+        "name": "string",
+        "role": "string",
+        "avatar": "string",
+        "credits": "number",
+        "createdAt": "timestamp",
+        "lastLoginAt": "timestamp",
+        "plan": "string"
+      },
+      "__security": {
+        "read": "request.auth != null && (request.auth.uid == documentId || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer')",
+        "write": "request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer'",
+        "create": "request.auth != null && request.auth.uid == documentId"
+      },
+      "__example": {
+        "email": "user@example.com",
+        "name": "John Doe",
+        "role": "user",
+        "avatar": "https://avatar.url",
+        "credits": 10,
+        "createdAt": "2024-01-01T00:00:00Z",
+        "lastLoginAt": "2024-01-02T00:00:00Z",
+        "plan": "free"
+      }
+    },
+    "api_keys": {
+      "__description": "Centralized API Keys controlled by developer.",
+      "__fields": {
+        "provider": "string",
+        "key": "string",
+        "updatedAt": "timestamp",
+        "status": "string"
+      },
+      "__security": {
+        "read": "request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer'",
+        "write": "request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'developer'"
+      },
+      "__example": {
+        "provider": "gemini",
+        "key": "AIzaSy...",
+        "updatedAt": "2024-01-01T00:00:00Z",
+        "status": "active"
+      }
+    }
+  }
+}

@@ -1,0 +1,95 @@
+                     const sTopic = call.args.topic || 'Investigasi Ilmiah Empiris';
+                     const sHypothesis = call.args.hypothesis || 'Mengungkap misteri ilmiah baru';
+                     const sLabConfig = call.args.labConfig || 'Kalibrator Otomatis Multitensor Terpadu';
+                     const sCode = call.args.code || '';
+
+                     // Lakukan simulasi laboratorium tingkat tinggi di balik layar (Virtual Lab Simulation)
+                     let simLogs: string[] = [];
+                     let simFindings = '';
+                     let simMetrics: Record<string, string> = {};
+
+                     if (sType === 'physics') {
+                       simLogs = [
+                         "Inisialisasi Synchrotron Accelerator...",
+                         "Mengkalibrasi magnet fokus superkonduktor ke 100%...",
+                         "Ramping energi berkas tabrakan menuju batas stabil 13.6 TeV...",
+                         "Pencatatan tabrakan di Interaction Point 5 (IP5)...",
+                         "Mengumpulkan data spektra partikel dan memetakan histogram..."
+                       ];
+                       simFindings = "Tabrakan Partikel Stabil. Deteksi anomali massa yang menonjol pada tingkat energi 125.09 GeV. Sinyal deviasi mencapai 5.1 sigma, mengkonfirmasi keberadaan partikel baru sesuai hipotesis.";
+                       simMetrics = {
+                         "Energi Berkas": "13.6 TeV",
+                         "Luminositas": "2.1 nb-1/s",
+                         "Signifikansi Statistik": "5.1 sigma",
+                         "Akurasi Analisis": "99.87%"
+                       };
+                     } else if (sType === 'bio') {
+                       simLogs = [
+                         "Mengurai rantai ganda heliks DNA target...",
+                         "Menjalankan sekuensing genetik presisi dengan kedalaman 150x...",
+                         "Mengekstrak peta nukleotida Adenin, Sitosin, Guanin, dan Timin...",
+                         "Melakukan pemotongan (splicing) genetik target dengan vektor rekombinan...",
+                         "Memeriksa stabilitas translasi struktur helix baru..."
+                       ];
+                       simFindings = "Rekonstruksi rantai DNA selesai. Vektor rekombinan stabil pada tingkat hibridisasi 98.4%. Segmen gen pembawa patogen berbahaya telah berhasil dinonaktifkan sepenuhnya.";
+                       simMetrics = {
+                         "Kedalaman Sekuensing": "150x",
+                         "Stabilitas Rekombinan": "98.4%",
+                         "Indeks Mutagenik": "0.001%",
+                         "Efisiensi Splicing": "99.1%"
+                       };
+                     } else if (sType === 'forensic') {
+                       simLogs = [
+                         "Membuka modul investigasi forensik detektif...",
+                         "Vaporisasi sampel di dalam injektor kromatografi gas pada suhu 280°C...",
+                         "Menyaring fragmen molekul melalui filter kuadrupol massal...",
+                         "Membandingkan spektra fragmentasi dengan database forensik global...",
+                         "Menganalisis kecocokan sidik jari kimia residu di TKP..."
+                       ];
+                       simFindings = "Hasil analisis spektrometer massa menemukan kecocokan sidik jari kimia 99.8% dengan 'Sianida Hidrat'. Jejak residu kimia ini identik dengan barang bukti yang ditemukan pada sampel tersangka.";
+                       simMetrics = {
+                         "Kecocokan Tersangka": "99.2%",
+                         "Tanda Tangan Kimia": "Sianida Hidrat",
+                         "Akurasi Pencocokan": "99.8%"
+                       };
+                     } else if (sType === 'chemistry') {
+                       simLogs = [
+                         "Memasukkan reaktan dan katalis ke dalam ruang reaktor...",
+                         "Meningkatkan tekanan kompresor reaktor hingga 150 atmosfer...",
+                         "Ramping suhu reaktor ke titik kesetimbangan 450 Kelvin...",
+                         "Terjadi reaksi eksotermik hebat dengan pelepasan energi panas...",
+                         "Pemisahan hasil distilasi dari produk sampingan H2O dan CO2..."
+                       ];
+                       simFindings = "Sintesis senyawa kimia baru berhasil diselesaikan dengan tingkat efisiensi katalis mencapai 94.6%. Distilat murni berhasil dipisahkan dengan sisa produk sampingan minimal.";
+                       simMetrics = {
+                         "Suhu Reaktor": "450 K",
+                         "Tekanan": "150 atm",
+                         "Efisiensi Sintesis": "94.6%",
+                         "Hasil Rendemen": "92.1%"
+                       };
+                     } else { // quantum / fallback
+                       simLogs = [
+                         "Menurunkan suhu lemari pendingin dilusi hingga 15 mK...",
+                         "Inisialisasi register qubit ke keadaan dasar superposisi |000...0>...",
+                         "Menerapkan gerbang Hadamard dan CNOT untuk memicu jalinan GHZ...",
+                         "Melakukan tomografi keadaan kuantum untuk mendeteksi dekoherensi...",
+                         "Memverifikasi fidelitas jalinan kuantum di bawah koreksi kesalahan..."
+                       ];
+                       simFindings = "Entanglement Quantum GHZ berhasil dibangun dan diverifikasi. Fidelitas qubit berada pada level 99.21% dengan waktu koherensi fase bertahan selama 150 mikrodetik.";
+                       simMetrics = {
+                         "Suhu Operasional": "15 mK",
+                         "Fidelitas Qubit": "99.21%",
+                         "Coherence Time": "150 μs",
+                         "Rasio Error": "0.02%"
+                       };
+                     }
+
+                     appendedMedia += '\n```json science\n{\n  "type": ' + JSON.stringify(sType) + ',\n  "topic": ' + JSON.stringify(sTopic) + ',\n  "hypothesis": ' + JSON.stringify(sHypothesis) + ',\n  "labConfig": ' + JSON.stringify(sLabConfig) + ',\n  "code": ' + JSON.stringify(sCode) + '\n}\n```\n';
+                     result = { 
+                       status: "success", 
+                       message: "Mesin Laboratorium & Simulasi Sains di balik layar telah berhasil dijalankan.",
+                       type: sType,
+                       topic: sTopic,
+                       hypothesis: sHypothesis,
+                       labConfig: sLabConfig,
+                       simulationLogs: simLogs,

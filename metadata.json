@@ -1,0 +1,6 @@
+{
+  "name": "Navix Ai",
+  "description": "Comprehensive Multi-Domain AI Operating System featuring Software Engineering, Multimedia Synthesis, Cybersecurity Shield, Document Intelligence, Research Grounding, Data Analytics, and Non-Repainting Market Intelligence.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
