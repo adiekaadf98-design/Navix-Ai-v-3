@@ -10,7 +10,7 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'ai';
   text: string;
-  timestamp: Date | string; // Allow string for JSON parsing
+  timestamp: Date | string;
   attachments?: Attachment[];
   systemInstruction?: string;
   thinkingState?: any;
@@ -29,6 +29,7 @@ export type NavixAppView =
   | 'document' 
   | 'science' 
   | 'cloud' 
+  | 'world_clock'
   | 'image_studio' 
   | 'video_studio' 
   | 'audio_studio' 
@@ -55,4 +56,3 @@ export interface SavedDocument {
   sessionId?: string;
   author?: string;
 }
-
