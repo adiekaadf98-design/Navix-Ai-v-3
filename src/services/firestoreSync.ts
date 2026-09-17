@@ -378,10 +378,10 @@ class FirestoreSyncService {
     const userId = this.getUserId();
     if (!userId || !item.id) return;
 
-    // For large base64 data URLs, do not truncate base64 string as it corrupts the image.
-    // Instead, store 'local_vault_only' in Firestore to keep document size light while preserving full uncompressed bytes in IndexedDB/Memory.
+    // Store full media URLs or base64 data directly in Firestore (safe within 1MB document limit)
     let safeUrl = item.mediaUrl;
-    if (safeUrl && safeUrl.startsWith('data:') && safeUrl.length > 50000) {
+    if (safeUrl && safeUrl.startsWith('data:') && safeUrl.length > 850000) {
+      // Only for extremely huge data over 850KB, preserve in local vault
       safeUrl = 'local_vault_only';
     }
 

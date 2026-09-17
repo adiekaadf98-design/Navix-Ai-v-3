@@ -204,19 +204,19 @@ export function translateAndEnrichPrompt(rawPrompt: string): EnrichedPromptResul
   if (isHuman) {
     subjectType = 'portrait';
     decomp = decomposeRealWorldComponents(rawPrompt);
-    // Focus on ultra-realistic, highly elegant, professional cinematic photography.
-    enrichedPrompt = `Breathtaking ultra-realistic cinematic portrait photography of ${translated}. [COMPOSITE COMPONENTS: Face: ${decomp.face}. Wardrobe: ${decomp.apparel}. Posture: ${decomp.handsAndPose}. Setting: ${decomp.environment}. Camera: ${decomp.opticalSetup}]. 100% genuine real human, stunningly elegant, masterpiece, Vogue magazine editorial, highly detailed photorealistic skin texture, dramatic soft lighting, award-winning photography.`;
+    // Fluent natural photographic composition: fluid, graceful, genuine living breathing human
+    enrichedPrompt = `Masterpiece candid documentary portrait of ${translated}. Spontaneous and fluid natural posture, elegant graceful expression, natural living breathing warmth, authentic human eyes with subtle corneal light catchlights, fine micro-pores and genuine skin texture without artificial smoothing. Authentic woven textile attire with organic cloth folds and drape, illuminated by soft cinematic directional daylight, shot on 35mm color film with 50mm f/1.4 prime lens, subtle natural depth of field.`;
     negativePrompt = '3d render, cgi, anime, cartoon, illustration, drawing, painting, doll face, plastic skin, porcelain skin, smooth skin, airbrush, beauty filter, makeup filter, mannequin, artificial eyes, glossy face, wax figure, deformed, cartoonish, fake smile, highly retouched, plastic, uncanny valley, fake, bad anatomy';
   } else if (isWildlife) {
     subjectType = 'wildlife';
-    enrichedPrompt = `Breathtaking National Geographic award-winning wildlife photography of ${translated}. Real animal anatomy, highly detailed fur/feathers, authentic eye reflection, cinematic natural lighting. Shot on telephoto lens, crisp optical focus, stunning depth of field. Strictly no cgi, no 3d render, no cartoon, no toy.`;
+    enrichedPrompt = `National Geographic award-winning candid wildlife photograph of ${translated}. Authentic living creature anatomy, detailed fur and feathers with organic movement, clear eye reflections, natural habitat with soft atmospheric lighting, shot on 400mm telephoto lens with crisp depth of field.`;
     negativePrompt = 'cgi, 3d render, stuffed animal, toy, cartoon, illustration, oversaturated, plastic fur, fake';
   } else if (isScenery) {
     subjectType = 'landscape';
-    enrichedPrompt = `Breathtaking cinematic landscape photograph of ${translated}. Stunning atmospheric lighting, highly detailed geographical terrain, gorgeous weather and sky. Shot on 24mm wide angle lens, razor-sharp optical clarity, masterpiece. Strictly no cgi, no fantasy painting, no 3d render.`;
+    enrichedPrompt = `Cinematic natural landscape photograph of ${translated}. True geographical textures, authentic weather dynamics, natural sunlight and atmospheric perspective, shot on 24mm wide angle prime lens with razor-sharp optical clarity.`;
     negativePrompt = 'cgi, 3d render, fantasy painting, cartoon, digital art, oversaturated neon, fake clouds, artificial';
   } else {
-    enrichedPrompt = `Breathtaking ultra-realistic authentic photograph of ${translated}. True-to-life surface textures, physical shadows, gorgeous cinematic lighting, shot on full-frame Hasselblad camera with 50mm lens, masterpiece photography. Strictly no 3d render, no cgi, no cartoon.`;
+    enrichedPrompt = `Authentic ultra-realistic photograph of ${translated}. Natural surface textures, accurate optical shadows, soft natural lighting, shot on full-frame Hasselblad camera with 50mm lens.`;
   }
 
   return {
@@ -228,7 +228,7 @@ export function translateAndEnrichPrompt(rawPrompt: string): EnrichedPromptResul
 }
 
 /**
- * Builds an authentic, uncompressed photographic URL utilizing flux with strict negative doll/plastic filters.
+ * Builds an authentic, uncompressed photographic URL utilizing flux without polluting T5 token space with negative words.
  */
 export function buildPollinationsRealismUrl(prompt: string, aspectRatio?: string, customSeed?: number): string {
   const photoreal = translateAndEnrichPrompt(prompt || 'Authentic candid human photograph');
@@ -238,9 +238,8 @@ export function buildPollinationsRealismUrl(prompt: string, aspectRatio?: string
   // Random seed for varied results
   const seed = customSeed || Math.floor(Math.random() * 9999999);
   
-  // Inject the negative prompt directly into the string so the engine strictly avoids the "doll" look
-  const finalPrompt = `${photoreal.prompt} | NEGATIVE: ${photoreal.negativePrompt}`;
-  const encodedPrompt = encodeURIComponent(finalPrompt.substring(0, 1500));
+  // Do NOT embed words like 'doll', 'plastic', 'mannequin' into Flux prompt string because T5 transformer encodes them as positive semantic tokens!
+  const encodedPrompt = encodeURIComponent(photoreal.prompt.substring(0, 1400));
   
   // Using model=flux for the highest quality realism on pollinations. enhance=false prevents their LLM from simplifying our detailed cinematic prompt.
   return `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&nologo=true&model=flux&enhance=false`;

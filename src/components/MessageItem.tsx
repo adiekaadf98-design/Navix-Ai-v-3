@@ -16,6 +16,40 @@ import {
   Sparkles 
 } from 'lucide-react';
 
+interface PineScriptViewerProps {
+  code: string;
+}
+
+const PineScriptViewer: React.FC<PineScriptViewerProps> = ({ code }) => {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="my-3 rounded-xl bg-[#090d16] border border-emerald-500/30 overflow-hidden shadow-2xl">
+      <div className="px-3.5 py-2 bg-slate-900/90 border-b border-emerald-500/20 flex items-center justify-between text-[11px] font-mono">
+        <span className="font-semibold text-emerald-400 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          PINESCRIPT V5 STRATEGY / QUANT SCRIPT
+        </span>
+        <button
+          onClick={handleCopy}
+          className="text-xs text-slate-400 hover:text-emerald-300 transition-colors flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-800/60 hover:bg-slate-800"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+          <span>{copied ? 'Tersalin' : 'Salin Script'}</span>
+        </button>
+      </div>
+      <pre className="p-3.5 text-xs font-mono text-emerald-300/90 overflow-x-auto leading-relaxed selection:bg-emerald-500/30">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+};
+
 interface MessageItemProps {
   message: Message;
   onRegenerate?: () => void;

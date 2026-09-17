@@ -69,9 +69,12 @@ export function LandingLoginScreen() {
   // 2. Email / Password Login
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    if (!email || !email.trim()) return;
+    if (!password || !password.trim()) {
+      return;
+    }
     clearError();
-    await login(email.trim(), password || 'developer123');
+    await login(email.trim(), password);
   };
 
   // 3. GitHub & Apple Provider Login
@@ -289,12 +292,12 @@ export function LandingLoginScreen() {
 
               <button
                 type="button"
-                onClick={() => loginDeveloper()}
+                onClick={handleFirebaseGoogleLogin}
                 disabled={isLoading}
                 className="text-red-400/80 hover:text-red-300 flex items-center gap-1.5 transition-colors cursor-pointer font-mono text-[11px]"
               >
                 <Zap size={13} className="text-amber-400" />
-                <span>Akses Developer</span>
+                <span>Akses Developer (Google)</span>
               </button>
             </div>
 

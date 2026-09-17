@@ -79,16 +79,16 @@ export class CloudMarketEngine {
             high: parseFloat(k.high),
             low: parseFloat(k.low),
             close: parseFloat(k.close),
-            volume: parseFloat(k.volume || 1000)
+            volume: parseFloat(k.volume || 0)
           }));
         }
       }
-    } catch (e) {
-      console.warn(`[CloudMarketEngine] Primary API fetch failed for ${cleanSymbol}, using emergency baseline:`, e);
+      const errJson = await res.json().catch(() => null);
+      throw new Error(errJson?.message || `DATA_UNAVAILABLE: Gagal mengambil candlestick untuk ${cleanSymbol}`);
+    } catch (e: any) {
+      console.warn(`[CloudMarketEngine] Provider API fetch failed for ${cleanSymbol}:`, e.message || e);
+      throw e;
     }
-
-    // Emergency baseline if network offline
-    return this.generateSyntheticCandles(cleanSymbol, limit);
   }
 
   /**
@@ -126,48 +126,6 @@ export class CloudMarketEngine {
       console.warn('[CloudMarketEngine] Failed fetching live tickers from API, using fallback:', e);
     }
     return INITIAL_MARKET_TICKERS;
-  }
-
-  /**
-   * Generates realistic institutional candles with natural price action, wicks, and trends
-   */
-  public static generateSyntheticCandles(symbol: string, count: number = 80): CandleData[] {
-    const basePrice = symbol.includes('BTC') ? 75600.0
-      : symbol.includes('ETH') ? 2519.0
-      : symbol.includes('SOL') ? 100.89
-      : symbol.includes('ZEC') ? 1132.37
-      : symbol.includes('XAU') ? 4349.42
-      : symbol.includes('EUR') ? 1.0845
-      : symbol.includes('DOGE') ? 0.1408
-      : 100.0;
-
-    const volatility = basePrice * 0.0028;
-    const now = Date.now();
-    const stepMs = 15 * 60 * 1000;
-    const candles: CandleData[] = [];
-    let currentClose = basePrice * 0.985;
-
-    for (let i = count; i >= 0; i--) {
-      const time = now - i * stepMs;
-      const wave = Math.sin(i / 6) * volatility * 1.5 + (Math.random() - 0.48) * volatility;
-      const open = currentClose;
-      const close = open + wave;
-      const high = Math.max(open, close) + Math.random() * volatility * 0.8;
-      const low = Math.min(open, close) - Math.random() * volatility * 0.8;
-      const volume = Math.floor(1000 + Math.random() * 8000 + Math.abs(close - open) * 200);
-
-      currentClose = close;
-      candles.push({
-        time,
-        open: parseFloat(open.toFixed(basePrice < 2 ? 4 : 2)),
-        high: parseFloat(high.toFixed(basePrice < 2 ? 4 : 2)),
-        low: parseFloat(low.toFixed(basePrice < 2 ? 4 : 2)),
-        close: parseFloat(close.toFixed(basePrice < 2 ? 4 : 2)),
-        volume
-      });
-    }
-
-    return candles;
   }
 
   /**

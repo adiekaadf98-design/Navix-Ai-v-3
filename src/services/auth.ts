@@ -1,5 +1,10 @@
 import { auth, googleAuthProvider, githubAuthProvider, appleAuthProvider, db } from '../lib/firebase';
-import { signInWithPopup, OAuthProvider, signInAnonymously } from 'firebase/auth';
+import { 
+  signInWithPopup, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signInAnonymously 
+} from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 export interface AuthUser {
@@ -36,12 +41,47 @@ export const isDeveloperEmail = (email?: string | null): boolean => {
 
 export const AuthService = {
   login: async (email: string, password?: string): Promise<AuthResponse> => {
+    if (!email || !email.trim()) {
+      return { success: false, error: 'Email wajib diisi.' };
+    }
+    if (!password || !password.trim()) {
+      return { success: false, error: 'Password wajib diisi. Silakan masukkan password akun Anda.' };
+    }
+
     try {
+      // 1. Authenticate with Firebase Email/Password
+      let userCredential;
+      try {
+        userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      } catch (fbErr: any) {
+        // If user not found, attempt creation if valid format
+        if (fbErr?.code === 'auth/user-not-found') {
+          try {
+            userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+          } catch (createErr: any) {
+            return { success: false, error: createErr?.message || 'Gagal mendaftarkan akun baru.' };
+          }
+        } else if (fbErr?.code === 'auth/wrong-password' || fbErr?.code === 'auth/invalid-credential') {
+          return { success: false, error: 'Password salah. Periksa kembali kredensial Anda.' };
+        } else {
+          return { success: false, error: fbErr?.message || 'Gagal login via Firebase Authentication.' };
+        }
+      }
+
+      if (!userCredential?.user) {
+        return { success: false, error: 'Kredensial Firebase tidak valid.' };
+      }
+
+      // 2. Obtain verified Firebase ID Token
+      const idToken = await userCredential.user.getIdToken();
+
+      // 3. Send ID Token to backend to verify and mint session JWT
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ idToken, email: email.trim() })
       });
+
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.token && data.user) {
@@ -50,20 +90,21 @@ export const AuthService = {
           return data;
         }
       }
+
       const errData = await res.json().catch(() => ({}));
-      return { success: false, error: errData.error || 'Autentikasi gagal.' };
+      return { success: false, error: errData.error || 'Autentikasi server gagal.' };
     } catch (error: any) {
       console.warn('Server auth error:', error);
       return { success: false, error: error?.message || 'Gagal menghubungi server autentikasi.' };
     }
   },
 
-  loginOAuthDirect: async (provider: 'google' | 'github' | 'apple', email: string, name?: string, avatar?: string, plan?: string): Promise<AuthResponse> => {
+  loginOAuthDirect: async (idToken: string, provider: 'google' | 'github' | 'apple'): Promise<AuthResponse> => {
     try {
       const res = await fetch('/api/auth/oauth-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, email, name, avatar, plan })
+        body: JSON.stringify({ idToken, provider })
       });
       if (res.ok) {
         const data = await res.json();
@@ -74,7 +115,7 @@ export const AuthService = {
         }
       }
       const errData = await res.json().catch(() => ({}));
-      return { success: false, error: errData.error || `Autentikasi ${provider} gagal.` };
+      return { success: false, error: errData.error || `Autentikasi ${provider} gagal di server.` };
     } catch (error: any) {
       console.warn('OAuth direct auth error:', error);
       return { success: false, error: error?.message || 'Gagal menghubungi server autentikasi.' };
@@ -84,25 +125,11 @@ export const AuthService = {
   loginWithFirebaseGoogle: async (): Promise<AuthResponse> => {
     try {
       const result = await signInWithPopup(auth, googleAuthProvider);
-      if (result.user && result.user.email) {
-        let existingPlan = 'free';
-        try {
-          const userRef = doc(db, 'users', result.user.uid);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists() && userSnap.data().plan) {
-            existingPlan = userSnap.data().plan;
-          }
-        } catch(e) {}
-        
-        const serverAuthRes = await AuthService.loginOAuthDirect(
-          'google',
-          result.user.email,
-          result.user.displayName || undefined,
-          result.user.photoURL || undefined,
-          existingPlan
-        );
+      if (result.user) {
+        const idToken = await result.user.getIdToken();
+        const serverAuthRes = await AuthService.loginOAuthDirect(idToken, 'google');
 
-        if (serverAuthRes.success) {
+        if (serverAuthRes.success && serverAuthRes.user) {
           try {
             const userRef = doc(db, 'users', result.user.uid);
             await setDoc(userRef, {
@@ -115,13 +142,17 @@ export const AuthService = {
           }
           return serverAuthRes;
         }
+        return serverAuthRes;
       }
     } catch (fbErr: any) {
       console.warn('Firebase Google Auth popup error:', fbErr);
       const isUnauthorizedDomain = fbErr?.code === 'auth/unauthorized-domain' || fbErr?.message?.includes('unauthorized-domain');
       if (isUnauthorizedDomain) {
-        // Domain Cloud Run belum di-whitelist di Firebase Console -> login langsung akun developer tanpa memblokir
-        return AuthService.loginOAuthDirect('google', 'adiekaadf98@gmail.com', 'Adieka (Developer)', undefined);
+        // Honest error - NEVER fake developer session
+        return { 
+          success: false, 
+          error: 'Domain Cloud Run ini belum terdaftar di Firebase Authorized Domains. Tambahkan domain ini di Firebase Console (Authentication > Settings > Authorized domains).' 
+        };
       }
       return { 
         success: false, 
@@ -131,11 +162,7 @@ export const AuthService = {
     return { success: false, error: 'Login Firebase Google gagal diproses.' };
   },
 
-  loginOAuth: async (provider: 'google' | 'github' | 'apple', email?: string, name?: string, avatar?: string): Promise<AuthResponse> => {
-    if (email) {
-      return AuthService.loginOAuthDirect(provider, email, name, avatar);
-    }
-
+  loginOAuth: async (provider: 'google' | 'github' | 'apple'): Promise<AuthResponse> => {
     if (provider === 'google') {
       return AuthService.loginWithFirebaseGoogle();
     }
@@ -145,25 +172,11 @@ export const AuthService = {
       if (provider === 'apple') authProvider = appleAuthProvider;
 
       const result = await signInWithPopup(auth, authProvider);
-      if (result.user && result.user.email) {
-        let existingPlan = 'free';
-        try {
-          const userRef = doc(db, 'users', result.user.uid);
-          const userSnap = await getDoc(userRef);
-          if (userSnap.exists() && userSnap.data().plan) {
-            existingPlan = userSnap.data().plan;
-          }
-        } catch(e) {}
+      if (result.user) {
+        const idToken = await result.user.getIdToken();
+        const serverAuthRes = await AuthService.loginOAuthDirect(idToken, provider);
 
-        const serverAuthRes = await AuthService.loginOAuthDirect(
-          provider,
-          result.user.email,
-          result.user.displayName || undefined,
-          result.user.photoURL || undefined,
-          existingPlan
-        );
-
-        if (serverAuthRes.success) {
+        if (serverAuthRes.success && serverAuthRes.user) {
           try {
             const userRef = doc(db, 'users', result.user.uid);
             await setDoc(userRef, {
@@ -176,13 +189,10 @@ export const AuthService = {
           }
           return serverAuthRes;
         }
+        return serverAuthRes;
       }
     } catch (fbErr: any) {
       console.warn(`Firebase popup OAuth error for ${provider}:`, fbErr);
-      const isUnauthorizedDomain = fbErr?.code === 'auth/unauthorized-domain' || fbErr?.message?.includes('unauthorized-domain');
-      if (isUnauthorizedDomain) {
-        return AuthService.loginOAuthDirect(provider, 'adiekaadf98@gmail.com', 'Adieka (Developer)', undefined);
-      }
       return { 
         success: false, 
         error: fbErr?.message || `Firebase ${provider} gagal.` 
@@ -194,12 +204,24 @@ export const AuthService = {
 
   loginDemo: async (): Promise<AuthUser> => {
     // Mode Demo untuk Pengguna Standar APK (Free tier - 5 request / hari)
-    const res = await AuthService.login('demo@navix.ai', 'demo123');
-    if (res.success && res.user) {
-      return res.user;
-    }
-    
-    // Fallback if network issue
+    try {
+      const userCredential = await signInAnonymously(auth);
+      const idToken = await userCredential.user.getIdToken();
+      const res = await fetch('/api/auth/demo-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.user) {
+          localStorage.setItem(TOKEN_KEY, data.token);
+          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+          return data.user;
+        }
+      }
+    } catch (_e) {}
+
     const demoUser: AuthUser = {
       id: 'usr_demo_user',
       email: 'demo@navix.ai',
@@ -214,29 +236,6 @@ export const AuthService = {
     };
     localStorage.setItem(USER_KEY, JSON.stringify(demoUser));
     return demoUser;
-  },
-
-  loginDeveloper: async (): Promise<AuthUser> => {
-    // Mode Developer Khusus Adieka (Unlimited kuota & fitur developer)
-    const res = await AuthService.login('adiekaadf98@gmail.com', 'developer123');
-    if (res.success && res.user) {
-      return res.user;
-    }
-    
-    const devUser: AuthUser = {
-      id: 'usr_dev_adieka',
-      email: 'adiekaadf98@gmail.com',
-      name: 'Adieka (Developer Navix AI)',
-      avatar: 'https://ui-avatars.com/api/?name=Adieka&background=E50914&color=fff',
-      provider: 'google',
-      role: 'developer',
-      plan: 'developer',
-      credits: 999999,
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString()
-    };
-    localStorage.setItem(USER_KEY, JSON.stringify(devUser));
-    return devUser;
   },
 
   logout: () => {
@@ -257,13 +256,7 @@ export const AuthService = {
     const raw = localStorage.getItem(USER_KEY);
     if (!raw) return null;
     try {
-      const parsed: AuthUser = JSON.parse(raw);
-      if (isDeveloperEmail(parsed.email)) {
-        parsed.role = 'developer';
-        parsed.plan = 'developer';
-        parsed.credits = 999999;
-      }
-      return parsed;
+      return JSON.parse(raw) as AuthUser;
     } catch (e) {
       return null;
     }

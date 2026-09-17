@@ -76,49 +76,22 @@ export const Login = () => {
     }
   };
 
-  const handleDirectProviderLogin = (provider: 'google' | 'github' | 'apple') => {
-    if (provider === 'google') {
-      setActiveProvider('google');
-      initiateRealGoogleAuth(
-        async (userData) => {
-          const success = await loginOAuth('google', userData.email, userData.name, userData.avatar);
-          setActiveProvider(null);
-          if (success) {
-            navigate('/');
-          } else {
-            setError('Google login failed.');
-          }
-        },
-        (err) => {
-          console.error(err);
-          setError(err);
-          setActiveProvider(null);
-        }
-      );
-      return;
-    }
-
+  const handleDirectProviderLogin = async (provider: 'google' | 'github' | 'apple') => {
     setActiveProvider(provider);
-    setTimeout(async () => {
-      let defaultEmail = 'adiekaadf98@gmail.com';
-      let defaultName = 'Adieka';
-      
-      if (provider === 'github') {
-        defaultEmail = 'adieka.github@gmail.com';
-        defaultName = 'Adieka (Developer)';
-      } else if (provider === 'apple') {
-        defaultEmail = 'adieka.apple@icloud.com';
-        defaultName = 'Adieka (Apple)';
-      }
-
-      const success = await loginOAuth(provider, defaultEmail, defaultName);
+    setError(null);
+    try {
+      const success = await loginOAuth(provider);
       setActiveProvider(null);
       if (success) {
         navigate('/');
       } else {
-        setError('Login failed. Please try again.');
+        setError(`${provider.toUpperCase()} login failed.`);
       }
-    }, 1500);
+    } catch (err: any) {
+      console.error(`[OAuth Login Error]:`, err);
+      setError(err?.message || `Login dengan ${provider} gagal.`);
+      setActiveProvider(null);
+    }
   };
 
   return (

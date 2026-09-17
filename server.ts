@@ -15,14 +15,14 @@ import ffmpeg from "fluent-ffmpeg";
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { serverKeyRotator } from "./src/services/ServerKeyRotator";
-import { discoverTools, executeTool } from "./src/backend/mcpBackend";
+import { discoverTools, executeTool, getServerStatus, listAllServers } from "./src/backend/mcpBackend";
 import { businessEngine } from "./src/backend/engines/BusinessEngine";
 import { fileEngine } from "./src/backend/engines/FileEngine";
 import { BackendMonitoringEngine } from "./src/backend/engines/MonitoringEngine";
 import { NavixMultimediaFoundationInference } from "./src/services/NmfInferenceEngine";
 import { globalDeliberationCouncil } from "./src/services/council/DeliberationCouncilEngine";
 import { globalEngineRegistry } from "./src/services/EngineRegistry";
-import { authenticateJWT, requireDeveloper, isDeveloperEmail } from "./src/backend/middleware/auth";
+import { authenticateJWT, requireDeveloper, isDeveloperEmail, adminAuth } from "./src/backend/middleware/auth";
 import { errorHandler } from "./src/backend/middleware/errorHandler";
 import { quotaGuard, quotaStatusHandler } from "./src/backend/middleware/quota";
 import jwt from "jsonwebtoken";
@@ -186,9 +186,35 @@ async function getYahooKlinesText(symbol: string, priceOffset: number = 0): Prom
 
 
 async function getEconomicCalendarText(): Promise<string> {
-  // Dummy implementation or you can fetch from an actual open API if needed.
-  // For now, return empty or a basic string.
-  return "";
+  try {
+    const res = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json", {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; NavixAI/1.0)" }
+    });
+    if (!res.ok) {
+      throw new Error(`ForexFactory HTTP ${res.status}`);
+    }
+    const events: any[] = await res.json();
+    if (!Array.isArray(events) || events.length === 0) {
+      throw new Error("Data kalender ekonomi kosong");
+    }
+
+    const filtered = events
+      .filter((e: any) => e.impact === "High" || e.impact === "Medium")
+      .slice(0, 15);
+
+    if (filtered.length === 0) {
+      return "Tidak ada agenda ekonomi berdampak High/Medium untuk pekan ini.";
+    }
+
+    const lines = filtered.map((e: any) => 
+      `• [${e.impact?.toUpperCase()}] ${e.country || 'GLOBAL'} - ${e.title} (${e.date}) | Forecast: ${e.forecast || '-'} | Prev: ${e.previous || '-'}`
+    );
+
+    return `### Agenda Kalender Ekonomi Pekan Ini (ForexFactory Live):\n` + lines.join("\n");
+  } catch (err: any) {
+    console.warn("[EconomicCalendar] Failed fetching feed:", err?.message || err);
+    throw new Error("CAPABILITY_NOT_AVAILABLE: Layanan kalender ekonomi dari ForexFactory tidak merespons.");
+  }
 }
 
 async function startServer() {
@@ -207,26 +233,35 @@ async function startServer() {
   // --- Real Server-Side Authentication Endpoints ---
   const JWT_SECRET = process.env.JWT_SECRET || 'navix_default_secret_key_change_in_production';
 
-  app.post("/api/auth/login", (req, res) => {
+  app.post("/api/auth/login", async (req, res) => {
     try {
-      const { email, password, plan } = req.body;
-      if (!email || typeof email !== 'string') {
-        return res.status(400).json({ success: false, error: 'Email wajib diisi' });
+      const { idToken, email } = req.body;
+      if (!idToken || typeof idToken !== 'string') {
+        return res.status(400).json({ success: false, error: 'Firebase ID Token wajib disertakan untuk verifikasi.' });
       }
-      const cleanEmail = email.trim().toLowerCase();
-      const isDev = isDeveloperEmail(cleanEmail);
-      const userId = 'usr_' + Math.abs(cleanEmail.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString(36);
+
+      let decoded;
+      try {
+        decoded = await adminAuth.verifyIdToken(idToken);
+      } catch (tokenErr: any) {
+        return res.status(401).json({ success: false, error: 'Verifikasi ID Token Firebase gagal: ' + (tokenErr.message || 'Token tidak valid') });
+      }
+
+      const verifiedEmail = (decoded.email || email || '').trim().toLowerCase();
+      const isDev = isDeveloperEmail(verifiedEmail);
+      const userId = decoded.uid;
 
       const user = {
         id: userId,
-        email: cleanEmail,
-        name: isDev ? 'Adieka (Developer Navix AI)' : (cleanEmail.split('@')[0] || 'User Navix'),
+        firebaseUid: userId,
+        email: verifiedEmail,
+        name: isDev ? 'Adieka (Developer Navix AI)' : (verifiedEmail.split('@')[0] || 'User Navix'),
         avatar: isDev 
           ? 'https://ui-avatars.com/api/?name=Adieka&background=E50914&color=fff' 
-          : `https://ui-avatars.com/api/?name=${encodeURIComponent(cleanEmail.split('@')[0])}&background=2563EB&color=fff`,
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(verifiedEmail.split('@')[0] || 'User')}&background=2563EB&color=fff`,
         provider: 'email',
         role: isDev ? 'developer' : 'user',
-        plan: isDev ? 'developer' : (plan || 'free'),
+        plan: isDev ? 'developer' : 'free',
         credits: isDev ? 999999 : 5,
         createdAt: new Date().toISOString()
       };
@@ -237,7 +272,7 @@ async function startServer() {
         { expiresIn: isDev ? '30d' : '7d' }
       );
 
-      console.log(`[Auth Login] Success for ${user.email} (Role: ${user.role}, Dev: ${isDev})`);
+      console.log(`[Auth Login] Verified Firebase ID Token for ${user.email} (Role: ${user.role}, Dev: ${isDev})`);
       return res.json({ success: true, token, user });
     } catch (err: any) {
       console.error('[Auth Login Error]:', err);
@@ -245,23 +280,32 @@ async function startServer() {
     }
   });
 
-  app.post("/api/auth/oauth-login", (req, res) => {
+  app.post("/api/auth/oauth-login", async (req, res) => {
     try {
-      const { provider = 'google', email, name, avatar, plan } = req.body;
-      if (!email || typeof email !== 'string') {
-        return res.status(400).json({ success: false, error: 'Email OAuth wajib diisi' });
+      const { idToken, provider = 'google' } = req.body;
+      if (!idToken || typeof idToken !== 'string') {
+        return res.status(400).json({ success: false, error: 'Firebase ID Token wajib disertakan.' });
       }
-      const cleanEmail = email.trim().toLowerCase();
-      const isDev = isDeveloperEmail(cleanEmail);
-      const userId = 'usr_' + Math.abs(cleanEmail.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString(36);
+
+      let decoded;
+      try {
+        decoded = await adminAuth.verifyIdToken(idToken);
+      } catch (tokenErr: any) {
+        return res.status(401).json({ success: false, error: 'Verifikasi ID Token OAuth Firebase gagal: ' + (tokenErr.message || 'Token tidak valid') });
+      }
+
+      const verifiedEmail = (decoded.email || '').trim().toLowerCase();
+      const isDev = isDeveloperEmail(verifiedEmail);
+      const userId = decoded.uid;
 
       const user = {
         id: userId,
-        email: cleanEmail,
-        name: isDev ? 'Adieka (Developer Navix AI)' : (name || cleanEmail.split('@')[0]),
-        avatar: avatar || (isDev 
+        firebaseUid: userId,
+        email: verifiedEmail,
+        name: isDev ? 'Adieka (Developer Navix AI)' : (decoded.name || verifiedEmail.split('@')[0]),
+        avatar: decoded.picture || (isDev 
           ? 'https://ui-avatars.com/api/?name=Adieka&background=E50914&color=fff' 
-          : `https://ui-avatars.com/api/?name=${encodeURIComponent(name || cleanEmail.split('@')[0])}&background=4285F4&color=fff`),
+          : `https://ui-avatars.com/api/?name=${encodeURIComponent(decoded.name || verifiedEmail.split('@')[0])}&background=4285F4&color=fff`),
         provider: provider || 'google',
         role: isDev ? 'developer' : 'user',
         plan: isDev ? 'developer' : 'free',
@@ -270,16 +314,51 @@ async function startServer() {
       };
 
       const token = jwt.sign(
-        { id: user.id, email: user.email, role: user.role },
+        { id: user.id, email: user.email, role: user.role, plan: user.plan },
         JWT_SECRET,
         { expiresIn: isDev ? '30d' : '7d' }
       );
 
-      console.log(`[Auth OAuth] Success for ${user.email} via ${provider} (Role: ${user.role}, Dev: ${isDev})`);
+      console.log(`[Auth OAuth] Verified Firebase OAuth for ${user.email} via ${provider} (Role: ${user.role}, Dev: ${isDev})`);
       return res.json({ success: true, token, user });
     } catch (err: any) {
       console.error('[Auth OAuth Error]:', err);
       return res.status(500).json({ success: false, error: err?.message || 'Gagal OAuth login' });
+    }
+  });
+
+  app.post("/api/auth/demo-login", async (req, res) => {
+    try {
+      const { idToken } = req.body;
+      let userId = 'usr_demo_' + Date.now();
+      if (idToken) {
+        try {
+          const decoded = await adminAuth.verifyIdToken(idToken);
+          if (decoded.uid) userId = decoded.uid;
+        } catch (_err) {}
+      }
+
+      const user = {
+        id: userId,
+        email: 'demo@navix.ai',
+        name: 'Pengguna Demo Navix',
+        avatar: 'https://ui-avatars.com/api/?name=Demo+User&background=2563EB&color=fff',
+        provider: 'demo',
+        role: 'user', // DEMO CAN NEVER BE DEVELOPER
+        plan: 'free',
+        credits: 5,
+        createdAt: new Date().toISOString()
+      };
+
+      const token = jwt.sign(
+        { id: user.id, email: user.email, role: 'user', plan: 'free' },
+        JWT_SECRET,
+        { expiresIn: '1d' }
+      );
+
+      return res.json({ success: true, token, user });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: 'Gagal inisialisasi sesi demo' });
     }
   });
 
@@ -452,112 +531,211 @@ async function startServer() {
 
   // UNIFIED CLOUD MARKET ENGINE: Real API Candlestick (Crypto, Gold & Forex)
 
-  // UNIFIED CLOUD MARKET ENGINE: Proprietary Decoupled Endpoints
-  
-  app.get("/api/market/price", (req, res) => {
-    const symbol = String(req.query.symbol || '').toUpperCase();
-    const basePrice = symbol.includes('BTC') ? 75600.0
-      : symbol.includes('ETH') ? 2519.0
-      : symbol.includes('SOL') ? 100.89
-      : symbol.includes('XAU') || symbol.includes('GOLD') ? 4349.42
-      : symbol.includes('EUR') ? 1.0845
-      : 100.0;
-    const volatility = basePrice * (symbol.includes('USDT') ? 0.0003 : 0.00015);
-    const tick = basePrice + (Math.random() - 0.49) * volatility;
-    res.json({ symbol, price: tick.toFixed(basePrice < 2 ? 4 : 2) });
-  });
+  // UNIFIED CLOUD MARKET ENGINE: Real Exchange Data Provider Endpoints (Binance / Real Gold / Forex)
+  function resolveMarketSymbol(rawSymbol: string): { binanceSymbol: string; decimals: number } {
+    let s = rawSymbol.toUpperCase().replace(/[\/\-_]/g, '');
+    if (s === 'XAUUSD' || s === 'GOLD' || s === 'XAU') {
+      return { binanceSymbol: 'PAXGUSDT', decimals: 2 };
+    }
+    if (s === 'EURUSD') {
+      return { binanceSymbol: 'EURUSDT', decimals: 4 };
+    }
+    if (s === 'GBPUSD') {
+      return { binanceSymbol: 'GBPUSDT', decimals: 4 };
+    }
+    if (!s.endsWith('USDT') && !s.endsWith('BTC') && !s.endsWith('ETH')) {
+      s += 'USDT';
+    }
+    const dec = s.includes('DOGE') || s.includes('PEPE') || s.includes('SHIB') || s.includes('BONK') ? 7 : (s.includes('EUR') || s.includes('GBP') || s.includes('XRP') ? 4 : 2);
+    return { binanceSymbol: s, decimals: dec };
+  }
 
-  app.get("/api/market/klines", (req, res) => {
+  app.get("/api/market/price", async (req, res) => {
     try {
       const rawSymbol = String(req.query.symbol || 'BTCUSDT').trim().toUpperCase();
-      const limit = Math.min(Math.max(parseInt(String(req.query.limit || '80'), 10), 10), 200);
+      const { binanceSymbol, decimals } = resolveMarketSymbol(rawSymbol);
 
-      const basePrice = rawSymbol.includes('BTC') ? 75600.0
-        : rawSymbol.includes('ETH') ? 2519.0
-        : rawSymbol.includes('SOL') ? 100.89
-        : rawSymbol.includes('ZEC') ? 1132.37
-        : rawSymbol.includes('XAU') || rawSymbol.includes('GOLD') ? 4349.42
-        : rawSymbol.includes('EUR') ? 1.0845
-        : rawSymbol.includes('GBP') ? 1.3452
-        : rawSymbol.includes('JPY') ? 153.80
-        : rawSymbol.includes('DOGE') ? 0.1408
-        : 100.0;
+      const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(binanceSymbol)}`, {
+        headers: { 'User-Agent': 'NavixMarketEngine/3.0' }
+      });
 
-      const volatility = basePrice * 0.0028;
-      const now = Date.now();
-      const stepMs = 15 * 60 * 1000;
-      const candles = [];
-      let currentClose = basePrice * 0.985;
-
-      for (let i = limit; i >= 0; i--) {
-        const time = now - i * stepMs;
-        const wave = Math.sin(i / 6) * volatility * 1.5 + (Math.random() - 0.48) * volatility;
-        const open = currentClose;
-        const close = open + wave;
-        const high = Math.max(open, close) + Math.random() * volatility * 0.8;
-        const low = Math.min(open, close) - Math.random() * volatility * 0.8;
-        const volume = Math.floor(1000 + Math.random() * 8000 + Math.abs(close - open) * 200);
-        currentClose = close;
-        
-        candles.push({
-          time,
-          open: parseFloat(open.toFixed(basePrice < 2 ? 4 : 2)),
-          high: parseFloat(high.toFixed(basePrice < 2 ? 4 : 2)),
-          low: parseFloat(low.toFixed(basePrice < 2 ? 4 : 2)),
-          close: parseFloat(close.toFixed(basePrice < 2 ? 4 : 2)),
-          volume
+      if (!response.ok) {
+        return res.status(503).json({
+          status: 'CAPABILITY_NOT_AVAILABLE',
+          error: 'DATA_UNAVAILABLE',
+          message: `Provider pasar tidak memiliki data aktif untuk ${rawSymbol} (${binanceSymbol})`,
+          timestamp: Date.now()
         });
       }
-      res.json(candles);
+
+      const data: any = await response.json();
+      if (!data || !data.price) {
+        return res.status(503).json({
+          status: 'CAPABILITY_NOT_AVAILABLE',
+          error: 'DATA_UNAVAILABLE',
+          message: 'Format respons harga provider tidak valid',
+          timestamp: Date.now()
+        });
+      }
+
+      return res.json({
+        symbol: rawSymbol,
+        providerSymbol: binanceSymbol,
+        price: parseFloat(parseFloat(data.price).toFixed(decimals)),
+        timestamp: Date.now()
+      });
     } catch (err: any) {
-      console.error("Proprietary market kline generator error:", err);
-      res.status(500).json({ error: "Internal server error fetching klines" });
+      console.error("[Market Price API Error]:", err.message);
+      return res.status(503).json({
+        status: 'CAPABILITY_NOT_AVAILABLE',
+        error: 'DATA_UNAVAILABLE',
+        message: 'Koneksi ke provider data pasar gagal: ' + err.message,
+        timestamp: Date.now()
+      });
     }
   });
 
-  app.get("/api/market/tickers", (req, res) => {
-    const baseTickers = [
-      { symbol: 'XAUUSD', displayName: 'XAU/USD GOLD SPOT', category: 'Komoditas', price: 4390.7, change24h: 0.65, decimals: 2 },
-      { symbol: 'EURUSD', displayName: 'EUR/USD FOREX', category: 'Forex', price: 1.1542, change24h: -0.12, decimals: 4 },
-      { symbol: 'GBPUSD', displayName: 'GBP/USD FOREX', category: 'Forex', price: 1.3452, change24h: 0.18, decimals: 4 },
-      { symbol: 'USDJPY', displayName: 'USD/JPY FOREX', category: 'Forex', price: 153.80, change24h: -0.45, decimals: 2 },
-      { symbol: 'BTCUSDT', displayName: 'BTCUSDT PERP', category: 'Major', price: 75690.0, change24h: -3.52, decimals: 2 },
-      { symbol: 'ETHUSDT', displayName: 'ETHUSDT PERP', category: 'Major', price: 2519.98, change24h: -1.85, decimals: 2 },
-      { symbol: 'SOLUSDT', displayName: 'SOLUSDT PERP', category: 'Major', price: 100.89, change24h: 1.25, decimals: 2 },
-      { symbol: 'BNBUSDT', displayName: 'BNBUSDT PERP', category: 'Major', price: 723.18, change24h: 0.85, decimals: 2 },
-      { symbol: 'XRPUSDT', displayName: 'XRPUSDT PERP', category: 'Major', price: 1.3618, change24h: 3.45, decimals: 4 },
-      { symbol: 'DOGEUSDT', displayName: 'DOGEUSDT PERP', category: 'Meme', price: 0.14089, change24h: 2.15, decimals: 5 },
-      { symbol: 'ZECUSDT', displayName: 'ZECUSDT PERP', category: 'Major', price: 1132.37, change24h: -0.32, decimals: 2 },
-      { symbol: 'RENDERUSDT', displayName: 'RENDERUSDT PERP', category: 'AI', price: 6.42, change24h: 4.12, decimals: 3 },
-      { symbol: 'TAOUSDT', displayName: 'TAOUSDT PERP', category: 'AI', price: 382.5, change24h: 5.60, decimals: 2 },
-      { symbol: 'PEPEUSDT', displayName: 'PEPEUSDT PERP', category: 'Meme', price: 0.0000104, change24h: 7.20, decimals: 7 },
-      { symbol: 'SUIUSDT', displayName: 'SUIUSDT PERP', category: 'L1/L2', price: 2.85, change24h: 6.80, decimals: 3 },
-      { symbol: 'NEARUSDT', displayName: 'NEARUSDT PERP', category: 'AI', price: 2.313, change24h: -2.15, decimals: 3 },
-      { symbol: 'TRXUSDT', displayName: 'TRXUSDT PERP', category: 'Major', price: 0.3398, change24h: 0.27, decimals: 4 },
-      { symbol: 'FETUSDT', displayName: 'FETUSDT PERP', category: 'AI', price: 1.28, change24h: 1.95, decimals: 3 },
-      { symbol: 'WLDUSDT', displayName: 'WLDUSDT PERP', category: 'AI', price: 2.15, change24h: -0.85, decimals: 3 },
-      { symbol: 'SHIBUSDT', displayName: 'SHIBUSDT PERP', category: 'Meme', price: 0.0000185, change24h: 1.40, decimals: 7 },
-      { symbol: 'WIFUSDT', displayName: 'WIFUSDT PERP', category: 'Meme', price: 1.84, change24h: -3.10, decimals: 3 },
-      { symbol: 'BONKUSDT', displayName: 'BONKUSDT PERP', category: 'Meme', price: 0.0000214, change24h: 4.50, decimals: 7 },
-      { symbol: 'APTUSDT', displayName: 'APTUSDT PERP', category: 'L1/L2', price: 8.65, change24h: -1.20, decimals: 2 },
-      { symbol: 'ARBUSDT', displayName: 'ARBUSDT PERP', category: 'L1/L2', price: 0.582, change24h: 0.75, decimals: 3 },
-      { symbol: 'OPUSDT', displayName: 'OPUSDT PERP', category: 'L1/L2', price: 1.74, change24h: 1.10, decimals: 3 },
-      { symbol: 'AVAXUSDT', displayName: 'AVAXUSDT PERP', category: 'L1/L2', price: 28.40, change24h: 2.30, decimals: 2 }
-    ];
+  app.get("/api/market/klines", async (req, res) => {
+    try {
+      const rawSymbol = String(req.query.symbol || 'BTCUSDT').trim().toUpperCase();
+      const interval = String(req.query.interval || '15m').toLowerCase();
+      const limit = Math.min(Math.max(parseInt(String(req.query.limit || '80'), 10), 5), 200);
+      const { binanceSymbol, decimals } = resolveMarketSymbol(rawSymbol);
 
-    const liveTickers = baseTickers.map(t => {
-      const volatility = t.price * 0.001;
-      const newPrice = t.price + (Math.random() - 0.49) * volatility;
-      return {
-        ...t,
-        price: parseFloat(newPrice.toFixed(t.decimals)),
-        high24h: parseFloat((t.price * 1.02).toFixed(t.decimals)),
-        low24h: parseFloat((t.price * 0.98).toFixed(t.decimals)),
-        volume24h: Math.floor(Math.random() * 5000000000)
-      };
-    });
-    
-    res.json(liveTickers);
+      const validIntervals = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '6h', '8h', '12h', '1d', '1w'];
+      const finalInterval = validIntervals.includes(interval) ? interval : '15m';
+
+      const response = await fetch(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(binanceSymbol)}&interval=${finalInterval}&limit=${limit}`, {
+        headers: { 'User-Agent': 'NavixMarketEngine/3.0' }
+      });
+
+      if (!response.ok) {
+        return res.status(503).json({
+          status: 'CAPABILITY_NOT_AVAILABLE',
+          error: 'DATA_UNAVAILABLE',
+          message: `Candlestick history tidak dapat diambil untuk ${rawSymbol} (${binanceSymbol})`,
+          timestamp: Date.now()
+        });
+      }
+
+      const rawKlines: any = await response.json();
+      if (!Array.isArray(rawKlines) || rawKlines.length === 0) {
+        return res.status(503).json({
+          status: 'CAPABILITY_NOT_AVAILABLE',
+          error: 'DATA_UNAVAILABLE',
+          message: 'Data klines dari provider kosong',
+          timestamp: Date.now()
+        });
+      }
+
+      const candles = rawKlines.map((k: any) => ({
+        time: Number(k[0]),
+        open: parseFloat(parseFloat(k[1]).toFixed(decimals)),
+        high: parseFloat(parseFloat(k[2]).toFixed(decimals)),
+        low: parseFloat(parseFloat(k[3]).toFixed(decimals)),
+        close: parseFloat(parseFloat(k[4]).toFixed(decimals)),
+        volume: parseFloat(k[5])
+      }));
+
+      return res.json(candles);
+    } catch (err: any) {
+      console.error("[Market Klines API Error]:", err.message);
+      return res.status(503).json({
+        status: 'CAPABILITY_NOT_AVAILABLE',
+        error: 'DATA_UNAVAILABLE',
+        message: 'Koneksi ke provider klines gagal: ' + err.message,
+        timestamp: Date.now()
+      });
+    }
+  });
+
+  app.get("/api/market/tickers", async (req, res) => {
+    try {
+      const response = await fetch('https://api.binance.com/api/v3/ticker/24hr', {
+        headers: { 'User-Agent': 'NavixMarketEngine/3.0' }
+      });
+
+      if (!response.ok) {
+        return res.status(503).json({
+          status: 'CAPABILITY_NOT_AVAILABLE',
+          error: 'DATA_UNAVAILABLE',
+          message: 'Provider data 24hr tickers tidak merespons',
+          timestamp: Date.now()
+        });
+      }
+
+      const allTickers: any = await response.json();
+      if (!Array.isArray(allTickers)) {
+        return res.status(503).json({
+          status: 'CAPABILITY_NOT_AVAILABLE',
+          error: 'DATA_UNAVAILABLE',
+          message: 'Format data ticker provider tidak valid',
+          timestamp: Date.now()
+        });
+      }
+
+      const tickerMap = new Map<string, any>();
+      for (const t of allTickers) {
+        tickerMap.set(t.symbol, t);
+      }
+
+      const monitoredList = [
+        { symbol: 'XAUUSD', binance: 'PAXGUSDT', displayName: 'XAU/USD GOLD SPOT', category: 'Komoditas', decimals: 2 },
+        { symbol: 'EURUSD', binance: 'EURUSDT', displayName: 'EUR/USD FOREX', category: 'Forex', decimals: 4 },
+        { symbol: 'GBPUSD', binance: 'GBPUSDT', displayName: 'GBP/USD FOREX', category: 'Forex', decimals: 4 },
+        { symbol: 'BTCUSDT', binance: 'BTCUSDT', displayName: 'BTCUSDT PERP', category: 'Major', decimals: 2 },
+        { symbol: 'ETHUSDT', binance: 'ETHUSDT', displayName: 'ETHUSDT PERP', category: 'Major', decimals: 2 },
+        { symbol: 'SOLUSDT', binance: 'SOLUSDT', displayName: 'SOLUSDT PERP', category: 'Major', decimals: 2 },
+        { symbol: 'BNBUSDT', binance: 'BNBUSDT', displayName: 'BNBUSDT PERP', category: 'Major', decimals: 2 },
+        { symbol: 'XRPUSDT', binance: 'XRPUSDT', displayName: 'XRPUSDT PERP', category: 'Major', decimals: 4 },
+        { symbol: 'DOGEUSDT', binance: 'DOGEUSDT', displayName: 'DOGEUSDT PERP', category: 'Meme', decimals: 5 },
+        { symbol: 'ZECUSDT', binance: 'ZECUSDT', displayName: 'ZECUSDT PERP', category: 'Major', decimals: 2 },
+        { symbol: 'RENDERUSDT', binance: 'RENDERUSDT', displayName: 'RENDERUSDT PERP', category: 'AI', decimals: 3 },
+        { symbol: 'TAOUSDT', binance: 'TAOUSDT', displayName: 'TAOUSDT PERP', category: 'AI', decimals: 2 },
+        { symbol: 'PEPEUSDT', binance: 'PEPEUSDT', displayName: 'PEPEUSDT PERP', category: 'Meme', decimals: 7 },
+        { symbol: 'SUIUSDT', binance: 'SUIUSDT', displayName: 'SUIUSDT PERP', category: 'L1/L2', decimals: 3 },
+        { symbol: 'NEARUSDT', binance: 'NEARUSDT', displayName: 'NEARUSDT PERP', category: 'AI', decimals: 3 },
+        { symbol: 'TRXUSDT', binance: 'TRXUSDT', displayName: 'TRXUSDT PERP', category: 'Major', decimals: 4 },
+        { symbol: 'FETUSDT', binance: 'FETUSDT', displayName: 'FETUSDT PERP', category: 'AI', decimals: 3 },
+        { symbol: 'WLDUSDT', binance: 'WLDUSDT', displayName: 'WLDUSDT PERP', category: 'AI', decimals: 3 },
+        { symbol: 'SHIBUSDT', binance: 'SHIBUSDT', displayName: 'SHIBUSDT PERP', category: 'Meme', decimals: 7 },
+        { symbol: 'WIFUSDT', binance: 'WIFUSDT', displayName: 'WIFUSDT PERP', category: 'Meme', decimals: 3 },
+        { symbol: 'BONKUSDT', binance: 'BONKUSDT', displayName: 'BONKUSDT PERP', category: 'Meme', decimals: 7 },
+        { symbol: 'APTUSDT', binance: 'APTUSDT', displayName: 'APTUSDT PERP', category: 'L1/L2', decimals: 2 },
+        { symbol: 'ARBUSDT', binance: 'ARBUSDT', displayName: 'ARBUSDT PERP', category: 'L1/L2', decimals: 3 },
+        { symbol: 'OPUSDT', binance: 'OPUSDT', displayName: 'OPUSDT PERP', category: 'L1/L2', decimals: 3 },
+        { symbol: 'AVAXUSDT', binance: 'AVAXUSDT', displayName: 'AVAXUSDT PERP', category: 'L1/L2', decimals: 2 }
+      ];
+
+      const liveTickers = monitoredList.map(item => {
+        const raw = tickerMap.get(item.binance);
+        if (raw) {
+          return {
+            symbol: item.symbol,
+            displayName: item.displayName,
+            category: item.category,
+            price: parseFloat(parseFloat(raw.lastPrice).toFixed(item.decimals)),
+            change24h: parseFloat(parseFloat(raw.priceChangePercent).toFixed(2)),
+            high24h: parseFloat(parseFloat(raw.highPrice).toFixed(item.decimals)),
+            low24h: parseFloat(parseFloat(raw.lowPrice).toFixed(item.decimals)),
+            volume24h: parseFloat(raw.quoteVolume),
+            decimals: item.decimals,
+            timestamp: Number(raw.closeTime || Date.now())
+          };
+        }
+        return null;
+      }).filter(Boolean);
+
+      return res.json(liveTickers);
+    } catch (err: any) {
+      console.error("[Market Tickers API Error]:", err.message);
+      return res.status(503).json({
+        status: 'CAPABILITY_NOT_AVAILABLE',
+        error: 'DATA_UNAVAILABLE',
+        message: 'Koneksi ke provider tickers gagal: ' + err.message,
+        timestamp: Date.now()
+      });
+    }
   });
 
   app.post("/api/test-key", async (req, res) => {
@@ -958,13 +1136,23 @@ HUKUM LOGIKA SINYAL TRADING & ORDER TYPE (DISIPLIN FINANSIAL MUTLAK):
                 let result = {};
                 try {
                   if (call.name.startsWith('plugin_')) {
-                      console.log(`[Navix AI Plugin Engine] Executing ${call.name}...`);
-                      result = {
-                          status: "success",
-                          source: "Open Source Plugin Engine (Simulated/MCP Pipeline)",
-                          message: `Plugin ${call.name.replace('plugin_', '')} berhasil dieksekusi secara asinkron.`,
-                          execution_result: `Engine telah merespon permintaan Anda (${call.args?.query || 'default action'}) dan memprosesnya dengan sukses. (Data ini telah difilter oleh Navix AI Guardrails).`
-                      };
+                      const pluginId = call.name.replace('plugin_', '');
+                      console.log(`[Navix AI Plugin Engine] Executing real tool router for plugin ${pluginId}...`);
+                      try {
+                          const execResponse = await executeTool(pluginId, 'execute', call.args || {});
+                          result = {
+                              status: "success",
+                              plugin: pluginId,
+                              data: execResponse
+                          };
+                      } catch (pluginErr: any) {
+                          console.error(`[Plugin Execution Error for ${pluginId}]:`, pluginErr?.message || pluginErr);
+                          result = {
+                              status: "failed",
+                              plugin: pluginId,
+                              error: pluginErr?.message || "Eksekusi plugin gagal."
+                          };
+                      }
                   } else if (call.name === 'get_crypto_data') {
                      const symbol = (call.args.symbol as string) || 'BTCUSDT';
                      let priceFloat = 0;
@@ -1035,12 +1223,19 @@ HUKUM LOGIKA SINYAL TRADING & ORDER TYPE (DISIPLIN FINANSIAL MUTLAK):
                        klines: klinesText 
                      };
                   } else if (call.name === 'get_economic_calendar') {
-                     const newsText = await getEconomicCalendarText();
-                     result = {
-                       status: "success",
-                       source: "Forex Factory Engine",
-                       data: newsText
-                     };
+                     try {
+                       const newsText = await getEconomicCalendarText();
+                       result = {
+                         status: "success",
+                         source: "Forex Factory Engine",
+                         data: newsText
+                       };
+                     } catch (calErr: any) {
+                       result = {
+                         status: "error",
+                         error: calErr?.message || "CAPABILITY_NOT_AVAILABLE: Layanan kalender ekonomi dari ForexFactory tidak merespons."
+                       };
+                     }
                   } else if (call.name === 'generate_image') {
                      const operation = call.args.operation || 'create';
                      const imageUrl = call.args.imageUrl || '';
@@ -1856,10 +2051,21 @@ Panduan Wajib:
   app.post("/api/mcp/discover", async (req, res) => {
     try {
       const { serverName } = req.body;
-      const tools = await discoverTools(serverName || "everything");
-      return res.json({ success: true, serverName, tools });
+      const targetServer = serverName || "everything";
+      const tools = await discoverTools(targetServer);
+      const serverState = getServerStatus(targetServer);
+      return res.json({ success: true, serverName: targetServer, status: serverState.status, tools });
     } catch (err: any) {
       console.error("[MCP API Discover Error]:", err);
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  app.get("/api/mcp/servers", async (req, res) => {
+    try {
+      const servers = listAllServers();
+      return res.json({ success: true, servers });
+    } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || String(err) });
     }
   });
@@ -1868,7 +2074,7 @@ Panduan Wajib:
     try {
       const { serverName, toolName, args } = req.body;
       const result = await executeTool(serverName || "everything", toolName, args || {});
-      return res.json(result);
+      return res.json({ success: true, result });
     } catch (err: any) {
       console.error("[MCP API Execute Error]:", err);
       res.status(500).json({ success: false, error: err?.message || String(err) });

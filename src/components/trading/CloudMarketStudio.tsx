@@ -33,7 +33,8 @@ import {
   Zap,
   Radio,
   Eye,
-  EyeOff
+  EyeOff,
+  AlertTriangle
 } from 'lucide-react';
 import { showToast } from '../../utils/toast';
 
@@ -79,6 +80,7 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
   const [livePrice, setLivePrice] = useState<number>(75690.0);
   const [isLoadingCandles, setIsLoadingCandles] = useState<boolean>(true);
   const [copiedSetup, setCopiedSetup] = useState<boolean>(false);
+  const [marketError, setMarketError] = useState<string | null>(null);
 
   const selectedTicker = useMemo(() => {
     return tickers.find(t => t.symbol === selectedSymbol) || tickers[0];
@@ -108,18 +110,23 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
 
   const activeResult: EngineAnalysisResult = engineResults[activeEngine];
 
-  // Fetch initial candles on symbol or timeframe change
+  // Fetch real candles on symbol or timeframe change
   const loadCandles = useCallback(async () => {
     setIsLoadingCandles(true);
+    setMarketError(null);
     try {
       const data = await CloudMarketEngine.fetchCandles(selectedSymbol, selectedTimeframe, 80);
       if (data && data.length > 0) {
         setCandles(data);
         const last = data[data.length - 1];
         setLivePrice(last.close);
+        setMarketError(null);
+      } else {
+        setMarketError('DATA_UNAVAILABLE: Tidak ada data candle valid dari provider pasar.');
       }
-    } catch (err) {
-      console.error('[CloudMarketStudio] Failed loading candles:', err);
+    } catch (err: any) {
+      console.error('[CloudMarketStudio] Failed loading candles from real provider:', err);
+      setMarketError(err?.message || 'CAPABILITY_NOT_AVAILABLE: Provider data pasar tidak dapat dihubungi.');
     } finally {
       setIsLoadingCandles(false);
     }
@@ -129,41 +136,35 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
     loadCandles();
   }, [loadCandles]);
 
-  // Real-Time Moving Candlestick Tick Engine
+  // Real-Time Moving Candlestick Tick Engine (Real Exchange Price Feed Only)
   useEffect(() => {
     const tickInterval = setInterval(async () => {
-      let newPrice = livePrice;
-
       const price = await CloudMarketEngine.fetchLivePrice(selectedSymbol);
-      if (price !== null) {
-        newPrice = parseFloat(price.toFixed(selectedTicker.decimals));
-      } else {
-        // Micro-tick fallback if network fails
-        const volatility = selectedSymbol.includes('USDT') ? 0.0003 : 0.00015;
-        const delta = (Math.random() - 0.49) * (newPrice * volatility);
-        newPrice = parseFloat((newPrice + delta).toFixed(selectedTicker.decimals));
+      if (price === null) {
+        // Real provider didn't return price, keep current price without random jitter
+        return;
       }
 
+      const newPrice = parseFloat(price.toFixed(selectedTicker.decimals));
       setLivePrice(newPrice);
 
-      // 2. Animate and stream into current candlestick
+      // Stream verified price into current candlestick
       setCandles(prev => {
         if (prev.length === 0) return prev;
         const lastIdx = prev.length - 1;
         const lastCandle = { ...prev[lastIdx] };
 
-        // Update close, high, low, volume of the current candle
+        // Update close, high, low with the real tick price (no fake volume addition)
         lastCandle.close = newPrice;
         if (newPrice > lastCandle.high) lastCandle.high = newPrice;
         if (newPrice < lastCandle.low) lastCandle.low = newPrice;
-        lastCandle.volume += Math.floor(Math.random() * 5);
 
         const updated = [...prev];
         updated[lastIdx] = lastCandle;
         return updated;
       });
 
-      // 3. Update ticker price in sidebar
+      // Update ticker price in sidebar
       setTickers(prev => prev.map(t => {
         if (t.symbol === selectedSymbol) {
           return { ...t, price: newPrice };
@@ -171,10 +172,10 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
         return t;
       }));
 
-    }, 2000);
+    }, 3000);
 
     return () => clearInterval(tickInterval);
-  }, [selectedSymbol, livePrice, selectedTicker.decimals]);
+  }, [selectedSymbol, selectedTicker.decimals]);
 
   // Periodic multi-asset Tickers sync from native API endpoint
   useEffect(() => {
@@ -545,6 +546,21 @@ Catatan: ${activeResult.caraMasuk}`;
 
         {/* CENTER COLUMN: The Moving Candlestick Chart & ATR Distance Scale */}
         <main className="flex-1 p-3 lg:p-4 flex flex-col gap-3 min-w-0 bg-[#05070a]">
+          {marketError && (
+            <div className="bg-amber-950/40 border border-amber-500/30 rounded-lg p-2.5 text-xs text-amber-200 font-mono flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                <span>{marketError}</span>
+              </span>
+              <button
+                onClick={loadCandles}
+                className="px-2 py-0.5 rounded bg-amber-900/50 hover:bg-amber-800 text-amber-100 text-[11px] underline cursor-pointer"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          )}
+
           {/* Main Candlestick Chart Canvas */}
           <div className="flex-1 min-h-[440px] flex flex-col">
             <CloudMarketCanvas

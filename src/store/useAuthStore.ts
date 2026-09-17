@@ -7,9 +7,9 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   login: (email: string, pass: string) => Promise<boolean>;
-  loginOAuth: (provider: 'google' | 'github' | 'apple', email?: string, name?: string, avatar?: string) => Promise<boolean>;
+  loginOAuth: (provider: 'google' | 'github' | 'apple') => Promise<boolean>;
   loginDemo: () => Promise<void>;
-  loginDeveloper: () => Promise<void>;
+  loginDeveloper: () => Promise<boolean>;
   logout: () => void;
   checkAuth: () => void;
   clearError: () => void;
@@ -37,9 +37,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     return false;
   },
 
-  loginOAuth: async (provider, email, name, avatar) => {
+  loginOAuth: async (provider) => {
     set({ isLoading: true, error: null });
-    const res = await AuthService.loginOAuth(provider, email, name, avatar);
+    const res = await AuthService.loginOAuth(provider);
     if (res.success && res.user) {
       set({
         user: res.user,
@@ -72,21 +72,23 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   loginDeveloper: async () => {
+    // Verified Developer login must authenticate through real Google OAuth
     set({ isLoading: true, error: null });
-    try {
-      const user = await AuthService.loginDeveloper();
+    const res = await AuthService.loginWithFirebaseGoogle();
+    if (res.success && res.user) {
       set({
-        user,
+        user: res.user,
         isAuthenticated: true,
         isLoading: false,
         error: null
       });
-    } catch (err) {
-      set({
-        isLoading: false,
-        error: err instanceof Error ? err.message : String(err)
-      });
+      return true;
     }
+    set({ 
+      isLoading: false, 
+      error: res.error || 'Akses Developer memerlukan autentikasi nyata akun Google Developer Navix AI.' 
+    });
+    return false;
   },
 
   logout: () => {

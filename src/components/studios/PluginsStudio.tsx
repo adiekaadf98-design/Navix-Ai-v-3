@@ -28,6 +28,23 @@ export const PluginsStudio: React.FC<PluginsStudioProps> = ({ onOpenSidebar, onS
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlugins, setSelectedPlugins] = useState<string[]>([]);
+  const [backendStatuses, setBackendStatuses] = useState<Record<string, 'READY' | 'DISCOVERED' | 'FAILED'>>({});
+
+  // Sync real MCP backend server statuses
+  useEffect(() => {
+    fetch('/api/mcp/servers')
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.servers)) {
+          const mapping: Record<string, 'READY' | 'DISCOVERED' | 'FAILED'> = {};
+          for (const s of data.servers) {
+            mapping[s.name] = s.status;
+          }
+          setBackendStatuses(mapping);
+        }
+      })
+      .catch(err => console.warn('[PluginsStudio] Could not fetch MCP servers:', err));
+  }, []);
 
   // Sinkronisasi status ke Firestore (Background Observer)
   useEffect(() => {
@@ -295,10 +312,29 @@ export const PluginsStudio: React.FC<PluginsStudioProps> = ({ onOpenSidebar, onS
                     <h2 className="text-sm font-bold text-white mt-2 break-words">{p.name}</h2>
                     <p className="text-xs text-neutral-400 mt-1 leading-relaxed line-clamp-2">{p.desc}</p>
                   </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-neutral-800/60 text-[11px] text-neutral-500 font-mono">
-                    <span>Status: {p.active ? 'Ready in Orchestrator' : 'Disabled'}</span>
-                    <span className="text-emerald-400">Open Source Verified</span>
-                  </div>
+                  {(() => {
+                    const mappedStatus = backendStatuses[p.id] || backendStatuses[p.name] || (p.active ? 'READY' : 'DISABLED');
+                    const displayStatus = !p.active ? 'DISABLED' : mappedStatus;
+                    return (
+                      <div className="flex items-center justify-between pt-2 border-t border-neutral-800/60 text-[11px] font-mono">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-neutral-500">Status:</span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                            displayStatus === 'READY'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                              : displayStatus === 'DISCOVERED'
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              : displayStatus === 'FAILED'
+                              ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                              : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                          }`}>
+                            {displayStatus}
+                          </span>
+                        </span>
+                        <span className="text-neutral-500">MCP Native Engine</span>
+                      </div>
+                    );
+                  })()}
                 </div>
               ))
             )}
