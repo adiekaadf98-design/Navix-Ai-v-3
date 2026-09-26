@@ -81,10 +81,10 @@ export const IstilahModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
     { term: 'Fair Value Gap (FVG)', desc: 'Ketidakseimbangan harga antara 3 candlestick yang meninggalkan celah likuiditas yang cenderung diisi kembali oleh pasar.' },
     { term: 'BOS (Break of Structure)', desc: 'Penembusan swing high atau swing low penting yang memvalidasi kelanjutan tren arah dominan.' },
     { term: 'CHoCH (Change of Character)', desc: 'Sinyal awal pembalikan arah struktur pasar ketika tren sebelumnya gagal membuat titik baru dan menembus level sebaliknya.' },
-    { term: 'Liquidity Sweep', desc: 'Pergerakan sumbu panjang yang menyapu level Stop Loss para trader ritel sebelum harga bergerak ke arah sebaliknya.' },
-    { term: 'ATR (Average True Range)', desc: 'Indikator volatilitas riil per candle yang digunakan untuk mengukur jarak aman titik Stop Loss dan Entry presisi.' },
+    { term: 'Liquidity Sweep (BSL / SSL)', desc: 'Pergerakan sumbu panjang yang menyapu level Stop Loss / likuiditas retail sebelum harga bergerak ke arah sebaliknya.' },
+    { term: 'Equilibrium (50%) & Premium/Discount', desc: 'Zona pembagian area valuasi institusional untuk membeli di area diskon (<50%) dan menjual di area premium (>50%).' },
+    { term: 'SNR (Support & Resistance Murni)', desc: 'Level horizontal reaksi historis harga tanpa menggunakan lagging indicator.' },
     { term: 'Golden Pocket (Fib 0.618)', desc: 'Area pembalikan harga dengan probabilitas tertinggi dalam pengukuran Fibonacci Retracement.' },
-    { term: 'Kumo Cloud (Ichimoku)', desc: 'Zona awan dinamis pembatas tren bullish dan bearish yang berfungsi sebagai support dan resistance masa depan.' },
     { term: 'RR Bersih (Risk-Reward)', desc: 'Perbandingan rasio keuntungan bersih terhadap risiko per transaksi (target minimal 1:2.0).' }
   ];
 
@@ -98,7 +98,7 @@ export const IstilahModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
           <X size={18} />
         </button>
 
-        <div className="flex items-center gap-2.5 mb-4 text-cyan-400">
+        <div className="flex items-center gap-2.5 mb-4 text-red-500">
           <BookOpen size={20} />
           <h3 className="text-lg font-bold text-white">Glosarium Istilah Trading & Mesin Analisa</h3>
         </div>
@@ -106,7 +106,7 @@ export const IstilahModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
         <div className="overflow-y-auto pr-2 space-y-3 divide-y divide-neutral-800/60">
           {terms.map((item, idx) => (
             <div key={idx} className="pt-3 first:pt-0">
-              <span className="font-semibold text-white font-mono text-xs text-cyan-300">{item.term}</span>
+              <span className="font-semibold text-white font-mono text-xs text-red-400">{item.term}</span>
               <p className="text-xs text-neutral-400 mt-0.5 leading-relaxed">{item.desc}</p>
             </div>
           ))}
@@ -162,14 +162,14 @@ export const KabarModal: React.FC<ModalProps> = ({ isOpen, onClose }) => {
                 placeholder="@username atau -100xxxxxxxx"
                 value={telegramChatId}
                 onChange={e => setTelegramChatId(e.target.value)}
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-200 font-mono focus:border-cyan-500 focus:outline-none"
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-neutral-200 font-mono focus:border-red-500 focus:outline-none"
               />
               <button
                 onClick={() => {
                   setSaved(true);
                   setTimeout(() => setSaved(false), 3000);
                 }}
-                className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-semibold flex items-center gap-1 cursor-pointer"
+                className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-semibold flex items-center gap-1 cursor-pointer"
               >
                 <Send size={13} />
                 Tes

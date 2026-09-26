@@ -4,6 +4,8 @@ import { navixMemoryEngine } from '../memory/MemoryEngine';
 import { globalTaskManager } from './TaskStateManager';
 import { globalToolSelector } from './ToolSelector';
 import { globalProjectMapEngine } from './ProjectMapEngine';
+import { globalFailureRecovery } from './FailureRecoveryEngine';
+import { globalVerificationEngine } from './VerificationEngine';
 
 export type TaskComplexity = 'SIMPLE' | 'MODERATE' | 'COMPLEX' | 'CRITICAL';
 
@@ -45,7 +47,7 @@ export class TaskComplexityRouter {
     }
 
     // 5. Risiko kesalahan / verifikasi
-    if (lowInput.includes('trading') || lowInput.includes('saham') || lowInput.includes('crypto')) {
+    if (lowInput.includes('trading') || lowInput.includes('saham') || lowInput.includes('crypto') || lowInput.includes('emas') || lowInput.includes('xau') || lowInput.includes('gold')) {
       score += 5;
       reasoning.push("High risk domain (Trading) detected.");
     }
@@ -333,39 +335,195 @@ export class NavixSupervisor {
       config.onSubtaskUpdate(subtasks);
     }
     
-    return { route, subtasks, taskState, tools };
+    return { route, subtasks, taskState, tools, taskId };
+  }
+
+  private async executeSingleSubtaskWithRecovery(
+    taskId: string,
+    sub: Subtask,
+    taskType: TaskType,
+    accumulatedOutputs: Record<string, any>,
+    config?: SupervisorConfig
+  ): Promise<any> {
+    globalTaskManager.updateSubtask(taskId, sub.id, { status: 'IN_PROGRESS' });
+    let activeEngineName = sub.assignedEngine;
+    let engine = globalEngineRegistry.getEngine(activeEngineName);
+    let attempts = 0;
+    let lastError = '';
+    let finalOutput: any = null;
+
+    while (attempts < 3) {
+      attempts++;
+      try {
+        if (!engine) {
+          throw new Error(`Engine [${activeEngineName}] not found in EngineRegistry.`);
+        }
+
+        const res = await engine.execute({
+          query: sub.input,
+          prompt: sub.input,
+          input: sub.input,
+          context: accumulatedOutputs,
+          taskId,
+          subtaskId: sub.id
+        });
+
+        const verifyRes = globalVerificationEngine.verify(taskType, res);
+        if (verifyRes.passed || verifyRes.score >= 50) {
+          finalOutput = res;
+          sub.verificationStatus = 'PASS';
+          break;
+        } else {
+          throw new Error(`Subtask verification failed: ${verifyRes.issues.join('; ')}`);
+        }
+      } catch (err: any) {
+        lastError = err?.message || 'Execution error';
+        const recoveryPlan = globalFailureRecovery.analyzeFailure(taskId, lastError, taskType, activeEngineName);
+
+        if (recoveryPlan.action === 'ALTERNATIVE_ENGINE' && recoveryPlan.alternativeEngine) {
+          const prevEngine = activeEngineName;
+          activeEngineName = recoveryPlan.alternativeEngine;
+          engine = globalEngineRegistry.getEngine(activeEngineName);
+          globalTaskManager.recordDecision(taskId, `Subtask [${sub.id}] recovered: switched from ${prevEngine} to fallback engine ${activeEngineName}`);
+          continue;
+        } else if (recoveryPlan.action === 'RETRY' && attempts < recoveryPlan.maxRetries) {
+          await new Promise(r => setTimeout(r, 150 * attempts));
+          globalTaskManager.recordDecision(taskId, `Subtask [${sub.id}] retrying attempt ${attempts + 1} due to transient failure`);
+          continue;
+        } else {
+          globalTaskManager.recordDecision(taskId, `Subtask [${sub.id}] execution aborted: ${recoveryPlan.reason}`);
+          break;
+        }
+      }
+    }
+
+    if (finalOutput) {
+      sub.status = 'COMPLETED';
+      sub.output = finalOutput;
+      globalTaskManager.updateSubtask(taskId, sub.id, {
+        status: 'COMPLETED',
+        output: finalOutput,
+        verificationStatus: 'PASS'
+      });
+      accumulatedOutputs[sub.id] = finalOutput;
+    } else {
+      sub.status = 'FAILED';
+      sub.verificationStatus = 'FAIL';
+      globalTaskManager.updateSubtask(taskId, sub.id, {
+        status: 'FAILED',
+        output: { error: lastError },
+        verificationStatus: 'FAIL'
+      });
+    }
+
+    return finalOutput;
+  }
+
+  public aggregateWorkerResults(subtasks: Subtask[]): {
+    summary: string;
+    findings: Record<string, any>;
+    conflictsDetected: boolean;
+    conflictResolution?: string;
+  } {
+    const findings: Record<string, any> = {};
+    const directions: string[] = [];
+    let conflictsDetected = false;
+    let conflictResolution: string | undefined;
+
+    for (const sub of subtasks) {
+      if (sub.output) {
+        findings[sub.id] = sub.output;
+        const dir = sub.output?.data?.direction || sub.output?.output?.direction || sub.output?.direction;
+        if (dir && typeof dir === 'string') {
+          directions.push(dir.toUpperCase());
+        }
+      }
+    }
+
+    // Check for conflicting directional biases across multi-worker subtasks
+    const hasBuy = directions.includes('BUY');
+    const hasSell = directions.includes('SELL');
+    if (hasBuy && hasSell) {
+      conflictsDetected = true;
+      conflictResolution = 'Multi-worker consensus conflict detected between BUY and SELL signals. Conservative neutral / risk-first hedge stance applied.';
+    }
+
+    const completedCount = subtasks.filter(s => s.status === 'COMPLETED').length;
+    return {
+      summary: `Multi-worker orchestration completed: ${completedCount}/${subtasks.length} subtasks verified.`,
+      findings,
+      conflictsDetected,
+      conflictResolution
+    };
   }
 
   public async executeSubtasks(taskId: string, subtasks: Subtask[], config?: SupervisorConfig) {
     const task = globalTaskManager.getTask(taskId);
-    if (!task) return;
+    if (!task) return null;
+
+    const { taskType } = classifyTask(task.originalRequest || '');
+    const accumulatedOutputs: Record<string, any> = {};
 
     // Separate dependent and independent subtasks
     const independent = subtasks.filter(s => s.dependencies.length === 0);
     const dependent = subtasks.filter(s => s.dependencies.length > 0);
 
-    config?.onStateChange?.('EXECUTING', 'Running parallel subtasks');
-    
+    config?.onStateChange?.('EXECUTING', 'Running multi-worker parallel pipeline with autonomous recovery');
+
     // Run independent tasks in parallel
     await Promise.all(independent.map(async (sub) => {
-       globalTaskManager.updateSubtask(taskId, sub.id, { status: 'IN_PROGRESS' });
-       // Here we would call the respective engine
-       const engine = globalEngineRegistry.getEngine(sub.assignedEngine);
-       if (engine) {
-          sub.output = await engine.execute({ query: sub.input });
-       }
-       globalTaskManager.updateSubtask(taskId, sub.id, { status: 'COMPLETED' });
+      await this.executeSingleSubtaskWithRecovery(taskId, sub, taskType, accumulatedOutputs, config);
     }));
 
-    // Run dependent tasks sequentially
+    // Run dependent tasks sequentially, injecting accumulated upstream outputs
     for (const sub of dependent) {
-       globalTaskManager.updateSubtask(taskId, sub.id, { status: 'IN_PROGRESS' });
-       const engine = globalEngineRegistry.getEngine(sub.assignedEngine);
-       if (engine) {
-          sub.output = await engine.execute({ query: sub.input, context: task.toolResults });
-       }
-       globalTaskManager.updateSubtask(taskId, sub.id, { status: 'COMPLETED' });
+      await this.executeSingleSubtaskWithRecovery(taskId, sub, taskType, accumulatedOutputs, config);
     }
+
+    const aggregated = this.aggregateWorkerResults(subtasks);
+    if (aggregated.conflictsDetected && aggregated.conflictResolution) {
+      globalTaskManager.recordDecision(taskId, aggregated.conflictResolution);
+    }
+
+    const allPassed = subtasks.every(s => s.status === 'COMPLETED');
+    if (allPassed) {
+      globalTaskManager.completeTask(taskId);
+      config?.onStateChange?.('COMPLETED', 'All subtasks verified successfully');
+    } else {
+      config?.onStateChange?.('FINALIZING', 'Pipeline finished with partial recovery');
+    }
+
+    if (config?.onSubtaskUpdate) {
+      config.onSubtaskUpdate(subtasks);
+    }
+
+    return {
+      taskId,
+      subtasks,
+      aggregated,
+      status: allPassed ? 'COMPLETED' : 'IN_PROGRESS'
+    };
+  }
+
+  /**
+   * Resume an existing long-horizon task from its latest valid checkpoint
+   */
+  public async resumeTask(taskId: string, config?: SupervisorConfig) {
+    const task = globalTaskManager.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task [${taskId}] not found for resumption.`);
+    }
+
+    config?.onStateChange?.('EXECUTING', `Resuming long-horizon task [${taskId}] from checkpoint`);
+    const pendingOrFailed = task.subtasks.filter(s => s.status === 'PENDING' || s.status === 'FAILED');
+    
+    if (pendingOrFailed.length === 0) {
+      config?.onStateChange?.('COMPLETED', 'Task was already fully completed');
+      return { taskId, status: 'COMPLETED', subtasks: task.subtasks };
+    }
+
+    globalTaskManager.recordDecision(taskId, `Resumed execution of ${pendingOrFailed.length} remaining subtasks from checkpoint`);
+    return this.executeSubtasks(taskId, task.subtasks, config);
   }
 }
 

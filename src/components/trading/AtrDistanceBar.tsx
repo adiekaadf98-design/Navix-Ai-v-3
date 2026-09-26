@@ -17,7 +17,7 @@ export const AtrDistanceBar: React.FC<AtrDistanceBarProps> = ({
   const setupCount = allResults.filter(e => e.status === 'setup').length;
   const pantauCount = allResults.filter(e => e.status === 'pantau').length;
 
-  const engineKeys: StrategyEngineType[] = ['SMC', 'ICHIMOKU', 'EMA200', 'SNR', 'FIBONACCI'];
+  const engineKeys: StrategyEngineType[] = ['SMC', 'SNR', 'RBS', 'FIBONACCI', 'CRT'];
 
   // Map ATR distance (0 to 3.5 ATR) to 0% - 100% of the bar
   const getPercentPosition = (atrVal: number) => {
@@ -63,8 +63,8 @@ export const AtrDistanceBar: React.FC<AtrDistanceBarProps> = ({
 
         {/* Current Price Marker */}
         <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
-          <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 ring-4 ring-cyan-400/20 animate-pulse" />
-          <span className="text-[10px] font-semibold text-cyan-300 font-mono ml-0.5">Harga</span>
+          <div className="w-2.5 h-2.5 rounded-full bg-red-500 ring-4 ring-red-500/30 animate-pulse" />
+          <span className="text-[10px] font-semibold text-red-400 font-mono ml-0.5">Harga</span>
         </div>
 
         {/* Strategy Engine Badges on the Track */}
@@ -83,7 +83,7 @@ export const AtrDistanceBar: React.FC<AtrDistanceBarProps> = ({
                 style={{ left: `${pos}%` }}
                 className={`absolute -translate-x-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono border transition-all cursor-pointer z-20 ${
                   isSelected
-                    ? 'bg-neutral-100 text-neutral-900 border-white shadow-lg ring-2 ring-emerald-500/50 scale-105 font-bold'
+                    ? 'bg-neutral-100 text-neutral-900 border-white shadow-lg ring-2 ring-red-500/50 scale-105 font-bold'
                     : isSetup
                     ? 'bg-emerald-950 text-emerald-300 border-emerald-600/70 hover:bg-emerald-900'
                     : 'bg-neutral-900 text-neutral-400 border-neutral-700 hover:text-neutral-200'

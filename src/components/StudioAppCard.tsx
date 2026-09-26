@@ -35,7 +35,7 @@ interface StudioAppCardProps {
 }
 
 export function StudioAppCard({ data, onOpenFullCanvas }: StudioAppCardProps) {
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
   const [showCode, setShowCode] = useState(false);
   const [copied, setCopied] = useState(false);
   const [deviceMode, setDeviceMode] = useState<'mobile' | 'desktop'>('mobile');

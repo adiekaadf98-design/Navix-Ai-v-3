@@ -921,7 +921,11 @@ export function scaffoldStudioApp(
       // Player Ship
       ctx.fillStyle = '#a855f7';
       ctx.beginPath();
-      ctx.roundRect(player.x, player.y, player.w, player.h, [8]);
+      if (typeof (ctx as any).roundRect === 'function') {
+        (ctx as any).roundRect(player.x, player.y, player.w, player.h, [8]);
+      } else {
+        ctx.rect(player.x, player.y, player.w, player.h);
+      }
       ctx.fill();
 
       // Energy glow

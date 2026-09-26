@@ -44,21 +44,21 @@ export function decodeJwtPayload(token: string): any {
 }
 
 /**
- * Trigger Real Google Sign In (Prompting the authentic account selection on the device)
+ * Trigger Real Google Sign In
  */
 export async function initiateRealGoogleAuth(
-  onSuccess: (userData: { email: string; name: string; avatar?: string }) => Promise<void>,
+  onSuccess: (userData: { email: string; name: string; avatar?: string; idToken?: string; accessToken?: string }) => Promise<void>,
   onError: (err: string) => void
 ) {
   const GOOGLE_CLIENT_ID = '1088225133288-31jbcs9r8bsobr43fg568ki7fvjt5bgi.apps.googleusercontent.com';
 
-  // 1. Try Google Identity Services (GSI) Token Client if available in browser / Android Webview
+  // 1. Try Google Identity Services (GSI) Token Client if available in browser
   if (typeof window !== 'undefined' && window.google?.accounts?.oauth2) {
     try {
       const tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: GOOGLE_CLIENT_ID,
         scope: 'email profile openid',
-        prompt: 'select_account', // Forces Google to display the list of all Google accounts on the phone/browser
+        prompt: 'select_account',
         callback: async (resp) => {
           if (resp.error) {
             console.warn('Google GSI error:', resp.error);
@@ -67,29 +67,28 @@ export async function initiateRealGoogleAuth(
           }
           if (resp.access_token) {
             try {
-              // Fetch genuine Google profile from Google API
               const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                 headers: { Authorization: `Bearer ${resp.access_token}` }
               });
               if (profileRes.ok) {
                 const profile = await profileRes.json();
-                await onSuccess({
-                  email: profile.email || 'adiekaadf98@gmail.com',
-                  name: profile.name || profile.given_name || 'Adieka',
-                  avatar: profile.picture
-                });
-                return;
+                if (profile && profile.email) {
+                  await onSuccess({
+                    email: profile.email,
+                    name: profile.name || profile.given_name || profile.email.split('@')[0],
+                    avatar: profile.picture,
+                    accessToken: resp.access_token
+                  });
+                  return;
+                }
               }
-            } catch (e) {
+            } catch (e: any) {
               console.error('Failed to fetch userinfo from Google API:', e);
             }
-            // If API fetch fails, proceed with token fallback
-            await onSuccess({
-              email: 'adiekaadf98@gmail.com',
-              name: 'Adieka',
-              avatar: `https://ui-avatars.com/api/?name=Adieka&background=4285F4&color=fff&bold=true`
-            });
+            onError('Gagal mendapatkan profil pengguna dari Google API.');
+            return;
           }
+          onError('Tidak ada access token dari Google OAuth.');
         }
       });
 
@@ -100,12 +99,12 @@ export async function initiateRealGoogleAuth(
     }
   }
 
-  // 2. Fallback to Google OAuth popup with `prompt=select_account`
+  // 2. Fallback to Google OAuth popup
   fallbackGoogleOAuthPopup(onSuccess, onError);
 }
 
 function fallbackGoogleOAuthPopup(
-  onSuccess: (userData: { email: string; name: string; avatar?: string }) => Promise<void>,
+  onSuccess: (userData: { email: string; name: string; avatar?: string; idToken?: string; accessToken?: string }) => Promise<void>,
   onError: (err: string) => void
 ) {
   const reqOrigin = window.location.origin;
@@ -117,7 +116,7 @@ function fallbackGoogleOAuthPopup(
     redirect_uri: redirectUri,
     response_type: 'token id_token',
     scope: 'email profile openid',
-    prompt: 'select_account', // Forces Google to show all accounts on this phone / browser
+    prompt: 'select_account',
     nonce: Math.random().toString(36).substring(2)
   }).toString();
 
@@ -133,9 +132,20 @@ function fallbackGoogleOAuthPopup(
   }
 
   const messageHandler = async (event: MessageEvent) => {
-    if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+    if (event.data?.type === 'OAUTH_AUTH_SUCCESS' || event.data?.type === 'GOOGLE_OAUTH_SUCCESS') {
       window.removeEventListener('message', messageHandler);
-      const { idToken, accessToken } = event.data;
+      const { idToken, accessToken, profile } = event.data;
+
+      if (profile && profile.email) {
+        await onSuccess({
+          email: profile.email,
+          name: profile.name || profile.given_name || profile.email.split('@')[0],
+          avatar: profile.picture,
+          idToken,
+          accessToken
+        });
+        return;
+      }
 
       if (idToken) {
         const decoded = decodeJwtPayload(idToken);
@@ -143,7 +153,9 @@ function fallbackGoogleOAuthPopup(
           await onSuccess({
             email: decoded.email,
             name: decoded.name || decoded.given_name || decoded.email.split('@')[0],
-            avatar: decoded.picture
+            avatar: decoded.picture,
+            idToken,
+            accessToken
           });
           return;
         }
@@ -155,25 +167,24 @@ function fallbackGoogleOAuthPopup(
             headers: { Authorization: `Bearer ${accessToken}` }
           });
           if (profileRes.ok) {
-            const profile = await profileRes.json();
-            await onSuccess({
-              email: profile.email,
-              name: profile.name || profile.email.split('@')[0],
-              avatar: profile.picture
-            });
-            return;
+            const fetchedProfile = await profileRes.json();
+            if (fetchedProfile?.email) {
+              await onSuccess({
+                email: fetchedProfile.email,
+                name: fetchedProfile.name || fetchedProfile.email.split('@')[0],
+                avatar: fetchedProfile.picture,
+                accessToken
+              });
+              return;
+            }
           }
-        } catch (e) {
-          // ignore
-        }
+        } catch (e) {}
       }
 
-      // Default fallback if response came through
-      await onSuccess({
-        email: 'adiekaadf98@gmail.com',
-        name: 'Adieka',
-        avatar: `https://ui-avatars.com/api/?name=Adieka&background=4285F4&color=fff&bold=true`
-      });
+      onError('Autentikasi Google gagal: data profil tidak valid.');
+    } else if (event.data?.type === 'GOOGLE_OAUTH_ERROR' || event.data?.type === 'OAUTH_AUTH_ERROR') {
+      window.removeEventListener('message', messageHandler);
+      onError(event.data?.error || 'Autentikasi OAuth gagal atau dibatalkan.');
     }
   };
 
@@ -184,7 +195,7 @@ function fallbackGoogleOAuthPopup(
  * Trigger Real GitHub OAuth Popup
  */
 export async function initiateRealGitHubAuth(
-  onSuccess: (userData: { email: string; name: string; avatar?: string }) => Promise<void>,
+  onSuccess: (userData: { email: string; name: string; avatar?: string; code?: string }) => Promise<void>,
   onError: (err: string) => void
 ) {
   const reqOrigin = window.location.origin;
@@ -212,11 +223,15 @@ export async function initiateRealGitHubAuth(
   const messageHandler = async (event: MessageEvent) => {
     if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
       window.removeEventListener('message', messageHandler);
-      await onSuccess({
-        email: 'adieka.github@gmail.com',
-        name: 'Adieka (GitHub)',
-        avatar: 'https://github.com/identicons/adieka.png'
-      });
+      const { email, name, avatar, code } = event.data;
+      if (email) {
+        await onSuccess({ email, name: name || email.split('@')[0], avatar, code });
+      } else {
+        onError('Autentikasi GitHub gagal menerima profil.');
+      }
+    } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
+      window.removeEventListener('message', messageHandler);
+      onError(event.data?.error || 'Autentikasi GitHub dibatalkan.');
     }
   };
 
@@ -227,7 +242,7 @@ export async function initiateRealGitHubAuth(
  * Trigger Real Apple Sign-In Popup
  */
 export async function initiateRealAppleAuth(
-  onSuccess: (userData: { email: string; name: string; avatar?: string }) => Promise<void>,
+  onSuccess: (userData: { email: string; name: string; avatar?: string; idToken?: string }) => Promise<void>,
   onError: (err: string) => void
 ) {
   const reqOrigin = window.location.origin;
@@ -256,11 +271,15 @@ export async function initiateRealAppleAuth(
   const messageHandler = async (event: MessageEvent) => {
     if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
       window.removeEventListener('message', messageHandler);
-      await onSuccess({
-        email: 'adieka.apple@icloud.com',
-        name: 'Adieka (Apple ID)',
-        avatar: 'https://ui-avatars.com/api/?name=Adieka+Apple&background=000&color=fff'
-      });
+      const { email, name, avatar, idToken } = event.data;
+      if (email) {
+        await onSuccess({ email, name: name || email.split('@')[0], avatar, idToken });
+      } else {
+        onError('Autentikasi Apple gagal menerima email.');
+      }
+    } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
+      window.removeEventListener('message', messageHandler);
+      onError(event.data?.error || 'Autentikasi Apple dibatalkan.');
     }
   };
 

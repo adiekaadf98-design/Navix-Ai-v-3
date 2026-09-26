@@ -7,6 +7,8 @@
  * mencegah kemalasan model (anti-laziness), dan menentukan eksekusi mesin pokok yang paling tepat.
  */
 
+import { globalToolSelector, PilgunSelectionResult } from '../ToolSelector';
+
 export interface CouncilAgent {
   id: string;
   name: string;
@@ -25,7 +27,16 @@ export interface DeliberationDialogue {
   timestamp: number;
 }
 
+export type DeliberationCategory = 
+  | 'DIRECT_DISCUSSION'       // Diskusi biasa, tanya jawab umum, sapaan, reasoning konsep teoretis
+  | 'DATA_RETRIEVAL'          // Butuh data pasar realtime, web search, deep research, file
+  | 'CAPABILITY_EXECUTION'    // Butuh eksekusi mesin: koding, gambar, video, audio, audit, skill, open-source
+  | 'MULTI_STEP_PIPELINE';    // Multi-tahap
+
 export interface DeliberationVerdict {
+  category: DeliberationCategory;
+  requiresExternalExecution: boolean;
+  targetCapability?: string;
   deconstructedIntent: {
     primaryGoal: string;
     implicitConstraints: string[];
@@ -39,8 +50,13 @@ export interface DeliberationVerdict {
   };
   recommendedEngine: {
     primaryEngine: string;
+    candidateEngines?: string[];
+    selectedEngine?: string;
     engineSequence: string[];
     justification: string;
+    evaluatesOpenSource?: boolean;
+    openSourceRationale?: string;
+    pilgunDetail?: PilgunSelectionResult;
   };
   executionRigorScore: number; // 0 - 100
   consensusSummary: string;
@@ -84,133 +100,317 @@ export class DeliberationCouncilEngine {
   }
 
   /**
+   * Menilai apakah query adalah percakapan santai, tanya jawab umum, atau diskusi konseptual
+   * yang TIDAK membutuhkan pemanggilan engine/tool eksternal.
+   */
+  public isLightDiscussion(userQuery: string): boolean {
+    const q = userQuery.trim().toLowerCase();
+    if (q.length === 0) return true;
+
+    // 1. Sapaan dan keramahan singkat
+    if (q.length < 40 && /^(halo|hai|p|pagi|siang|sore|malam|terima kasih|makasih|thanks|siapa kamu|apa kabar|ok|oke|siap|good morning|hello|hi)[\s.!?]*$/i.test(q)) {
+      return true;
+    }
+
+    // 2. Pertanyaan konsep murni, edukasi teoretis, atau dialog umum tanpa kebutuhan feed bursa atau generator media
+    const isConceptual = /^(jelaskan|ceritakan|apa itu|bagaimana|mengapa|apa arti|apa maksud|definisi|filosofi|pendapatmu|uraikan|apa yang dimaksud|tolong jelaskan)\b/i.test(q);
+    const hasExternalTrigger = /(trading|crypto|kripto|saham|forex|gold|xauusd|btcusdt|harga|market|candle|gambar|lukis|foto|video|lagu|musik|audio|github|repo|pip install|npm install|hack|penetration|audit payload|soal pilgun)/i.test(q);
+
+    if (isConceptual && !hasExternalTrigger) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Menjalankan sidang diskusi internal di balik layar untuk sebuah prompt pengguna.
+   * Melibatkan 4 agen yang masing-masing mengajukan argumen, antitesis, kritik risiko,
+   * dan menyepakati SATU keputusan terbaik sebelum eksekusi berlanjut.
    */
   public deliberate(userQuery: string, context?: { attachmentsCount?: number; historyLength?: number }): DeliberationVerdict {
     const q = userQuery.trim().toLowerCase();
     const dialogueLog: DeliberationDialogue[] = [];
     const timestamp = Date.now();
+    const isLight = this.isLightDiscussion(userQuery);
 
-    // 1. Agent Horizon: Dekonstruksi Intent
-    let primaryGoal = 'Memproses permintaan informasi dan memberikan solusi komprehensif tanpa reduksi.';
+    if (isLight) {
+      const primaryGoal = 'Merespons percakapan ramah, tanya jawab umum, dan diskusi konseptual secara hangat, edukatif, dan bernalar tinggi.';
+      const consensusSummary = 'Dewan deliberasi menyepakati: Request tergolong Diskusi Langsung & Pemaparan Konsep. Selesaikan secara komunikatif dan elegan tanpa beban overhead pemanggilan mesin eksternal.';
+      
+      dialogueLog.push({
+        agentId: 'agent_intent_auditor',
+        agentName: 'Agent Horizon (Intent Deconstructor)',
+        role: 'Evaluasi Konseptual Ringan',
+        thought: `Query "${userQuery}" adalah dialog langsung / eksplorasi konseptual yang tidak memerlukan feed pasar eksternal maupun komputasi GPU berat.`,
+        recommendation: 'Sajikan jawaban yang kaya wawasan, terstruktur, ramah, dan solutif.',
+        timestamp: timestamp + 20
+      });
+      dialogueLog.push({
+        agentId: 'agent_rigor_director',
+        agentName: 'Agent Sovereign (Consensus Director)',
+        role: 'Direktur Konsensus',
+        thought: 'Sidang menetapkan alur dialog kognitif cerdas (USER -> AI DEBAT -> JAWABAN) tanpa bypass atau pemanggilan tool yang tidak perlu.',
+        recommendation: 'Langsung formulasikan respons komprehensif kepada pengguna.',
+        timestamp: timestamp + 50
+      });
+
+      return {
+        category: 'DIRECT_DISCUSSION',
+        requiresExternalExecution: false,
+        targetCapability: 'conversational_reasoning',
+        deconstructedIntent: {
+          primaryGoal,
+          implicitConstraints: ['Gaya bahasa bersahabat', 'Komunikasi natural', 'Argumentasi logis'],
+          outputFormatRequested: 'Teks penjelasan bernas, santun, dan terstruktur rapi.',
+          antiLazinessDirectives: ['Berikan penjelasan tuntas, jangan memotong konsep penting.']
+        },
+        factCheckAudit: {
+          factualConfidence: 100,
+          hallucinationRisk: 'ZERO',
+          prohibitedAssumptions: []
+        },
+        recommendedEngine: {
+          primaryEngine: 'ConversationalEngine',
+          engineSequence: ['ThinkingEngine'],
+          justification: 'Diskusi langsung & reasoning konseptual dieksekusi secara elegan tanpa beban eksternal.'
+        },
+        executionRigorScore: 99,
+        consensusSummary,
+        dialogueLog
+      };
+    }
+
+    // Penentuan Kategori & Mesin Pokok (termasuk evaluasi Mesin Navix vs Open-Source GitHub)
+    let category: DeliberationCategory = 'CAPABILITY_EXECUTION';
+    let requiresExternalExecution = true;
+    let targetCapability = 'general_execution';
+    let primaryGoal = `Analisis mendalam dan formulasi solusi komprehensif untuk: "${userQuery}".`;
     const implicitConstraints: string[] = [];
     const antiLazinessDirectives: string[] = [
       'DILARANG memberikan kode sepotong dengan komentar // tulis kode di sini.',
-      'DILARANG menjawab secara tergesa-gesa atau menggunakan asumsi tanpa dasar.',
+      'DILARANG menjawab secara tergesa-gesa atau menggunakan asumsi tanpa dasar empiris.',
       'Wajib memberikan penjelasan terstruktur, tuntas, dan berorientasi hasil nyata.'
     ];
 
-    if (q.includes('trading') || q.includes('crypto') || q.includes('forex') || q.includes('gold') || q.includes('xauusd') || q.includes('btc')) {
-      primaryGoal = 'Analisis pergerakan harga pasar, pemetaan likuiditas, dan struktur order block presisi tinggi.';
-      implicitConstraints.push('Data harga harus bersumber dari mesin real-time (Binance/Yahoo/TradingView), dilarang mengarang harga.');
-      implicitConstraints.push('Wajib sertakan level Stop Loss dan Take Profit yang rasional sesuai kaidah Risk-to-Reward.');
-      antiLazinessDirectives.push('Hitung kalkulasi rasio risiko secara matematis, jangan hanya memberi sinyal acak.');
-    } else if (q.includes('riset') || q.includes('ilmiah') || q.includes('laboratorium') || q.includes('hipotesis') || q.includes('skripsi') || q.includes('tesis')) {
-      primaryGoal = 'Riset ilmiah empiris dengan metodologi deduktif, perumusan hipotesis falsifiabel, dan rancangan pengujian in-silico.';
-      implicitConstraints.push('Wajib mengikuti struktur IMRaD (Introduction, Methods, Results, Discussion).');
-      implicitConstraints.push('Klaim empiris harus terbebas dari bias spekulatif.');
-      antiLazinessDirectives.push('Paparkan variabel kontrol, variabel bebas, dan rumus kalkulasi statistik secara utuh.');
-    } else if (q.includes('kode') || q.includes('code') || q.includes('apk') || q.includes('app') || q.includes('bug') || q.includes('error')) {
-      primaryGoal = 'Pengembangan kode software produksi, audit arsitektur, dan mitigasi dependensi bebas bug.';
-      implicitConstraints.push('Semua tipe TypeScript harus kuat (strongly typed), dilarang menggunakan type any serampangan.');
-      implicitConstraints.push('Struktur modular harus dipatuhi, hindari penumpukan logika di satu berkas raksasa.');
-      antiLazinessDirectives.push('Tulis implementasi kode lengkap tanpa memotong bagian penting.');
-    } else if (q.includes('gambar') || q.includes('foto') || q.includes('visual') || q.includes('render')) {
-      primaryGoal = 'Rekayasa visual fotorealistik dengan dekomposisi optik kamera nyata dan fidelitas tinggi.';
-      implicitConstraints.push('Spesifikasikan focal length, apertur f-stop, pencahayaan alami, dan mikro-tekstur.');
-      antiLazinessDirectives.push('Hindari gaya ilustratif palsu jika user meminta fotorealistik.');
-    }
+    let thesisThought = `Membedah perintah user "${userQuery}". Proposal argumen awal: Kita harus memecah masalah ini ke dalam lapisan inti, menetapkan batasan mutlak, dan menyusun peta kerja tuntas.`;
+    let veritasCritique = 'Waspadai potensi bias kepastian berlebih atau asumsi empiris yang belum teruji di dunia nyata.';
+    let apexStrategy = 'Evaluasi kesesuaian ekosistem modul inti untuk mengeksekusi kebutuhan secara tuntas.';
+    let finalConsensus = '';
 
-    dialogueLog.push({
-      agentId: 'agent_intent_auditor',
-      agentName: 'Agent Horizon (Intent Deconstructor)',
-      role: 'Audit Pemahaman & Kemalasan',
-      thought: `Menganalisis query "${userQuery}". Menemukan fokus utama pada: ${primaryGoal}. Mendeteksi potensi kemalasan model jika respons disajikan secara umum.`,
-      critique: 'Model AI rentan memberi respons template dangkal jika tidak diinstruksikan dengan batasan ketat.',
-      recommendation: `Terapkan ${antiLazinessDirectives.length} direktif anti-malas. Kunci maksud user pada resolusi tertinggi.`,
-      timestamp: timestamp + 20
-    });
-
-    // 2. Agent Veritas: Pemeriksaan Fakta & Pembasmian Halusinasi
-    let factualConfidence = 95;
+    let primaryEngine = 'AdaptiveReasoningEngine';
+    let candidateEngines: string[] = ['Supervisor', 'ThinkingEngine'];
+    let engineSequence: string[] = ['Supervisor', 'ThinkingEngine'];
+    let justification = 'Tugas analitis umum, dieksekusi dengan sintesis penalaran adaptif multi-model.';
+    let factualConfidence = 96;
     let hallucinationRisk: 'ZERO' | 'LOW' | 'MEDIUM' | 'HIGH' = 'LOW';
+    let evaluatesOpenSource = false;
+    let openSourceRationale = '';
     const prohibitedAssumptions: string[] = [
       'Dilarang mengklaim hasil riset yang tidak dapat diuji secara empiris.',
       'Dilarang menyebutkan angka indikator tanpa sumber kalkulasi.'
     ];
 
-    if (q.includes('trading') || q.includes('harga') || q.includes('prediksi')) {
+    // Evaluasi spesifik per domain:
+    if (q.includes('github') || q.includes('open-source') || q.includes('open source') || q.includes('repo') || q.includes('library') || q.includes('package') || q.includes('npm') || q.includes('pip')) {
+      category = 'CAPABILITY_EXECUTION';
+      targetCapability = 'github_opensource';
+      primaryGoal = 'Inspeksi repositori GitHub, audit lisensi/stabilitas open-source, dan integrasi modul arsitektur.';
+      implicitConstraints.push('Periksa lisensi, aktivitas, dependensi, dan kompatibilitas sebelum merekomendasikan library.');
+      antiLazinessDirectives.push('Sertakan perintah instalasi riil dan contoh integrasi kode modular tanpa placeholder.');
+
+      thesisThought = `Argumen Horizon: User membutuhkan evaluasi ekosistem open-source GitHub untuk memecahkan kapabilitas teknis.`;
+      veritasCritique = `Sanggahan Veritas: Pastikan repositori GitHub yang dianalisis benar-benar aktif, memiliki lisensi sah (MIT/Apache), dan bukan mock dummy.`;
+      apexStrategy = `Strategi Apex: Alokasikan ke GitHubOpenSourceEngine (terintegrasi 50.000+ keahlian open-source resmi dan GitHub Live API).`;
+
+      primaryEngine = 'GitHubOpenSourceEngine';
+      candidateEngines = ['GitHubOpenSourceEngine', 'ProjectMapEngine', 'CodingEngine'];
+      engineSequence = ['GitHubOpenSourceEngine', 'VerificationEngine'];
+      justification = 'Memerlukan query ke katalog 50.000+ skill open source dan live GitHub repo inspection.';
+      evaluatesOpenSource = true;
+      openSourceRationale = 'Mengevaluasi repositori GitHub pihak ketiga dan matriks dependensi open-source terverifikasi.';
+      factualConfidence = 99;
       hallucinationRisk = 'ZERO';
+    } else if (q.includes('trading') || q.includes('crypto') || q.includes('forex') || q.includes('gold') || q.includes('xauusd') || q.includes('saham') || q.includes('btc') || q.includes('sol') || q.includes('eth') || q.includes('bbca') || q.includes('nvda')) {
+      category = 'DATA_RETRIEVAL';
+      targetCapability = 'trading';
+      primaryGoal = 'Analisis pergerakan harga pasar finansial, pemetaan likuiditas, order block, dan sinyal matematis multi-aset.';
+      implicitConstraints.push('Data harga harus bersumber dari feed real-time pasar (Binance/Yahoo/OANDA), dilarang keras mengarang harga.');
+      implicitConstraints.push('Wajib menghitung rasio Risk-to-Reward (RR >= 1:2) dengan batasan Entry, SL, dan TP yang presisi.');
+      antiLazinessDirectives.push('Hitung kalkulasi rasio risiko secara matematis, jangan hanya memberi sinyal tebakan.');
+      
+      thesisThought = `Argumen Horizon (Analis Finansial): Instrumen ini membutuhkan identifikasi struktur tren, imbalance (FVG), dan level likuiditas kunci sebelum merumuskan kesimpulan posisi.`;
+      veritasCritique = `Sanggahan Veritas (Auditor Risiko): Jangan hanya melihat tren searah. Periksa potensi liquidity sweep, manipulasi sesi, dan volatilitas spread sebelum menetapkan level SL/TP. Data harga wajib diverifikasi riil.`;
+      apexStrategy = `Strategi Apex (Arbiter Mesin): Pilgun mengevaluasi SignalEngine (Navix Core) dan RetailTraderGitHubEngine (Open-source CCXT/TA-Lib) untuk memastikan non-repainting verification.`;
+      
+      primaryEngine = 'SignalEngine';
+      candidateEngines = ['SignalEngine', 'RetailTraderGitHubEngine', 'CryptoEngine', 'StockEngine'];
+      engineSequence = ['SignalEngine', 'VolatilitySentinel', 'VerificationEngine'];
+      justification = 'Membutuhkan data klines real-time pasar dan audit matematis Risk-to-Reward terverifikasi.';
+      evaluatesOpenSource = true;
+      openSourceRationale = 'Memanfaatkan standar open-source CCXT dan TA-Lib untuk formula RSI/EMA/ATR non-repainting.';
+      hallucinationRisk = 'ZERO';
+      factualConfidence = 99;
+      prohibitedAssumptions.push('Dilarang mengarang harga pembukaan/penutupan candle.');
+    } else if (q.includes('web') || q.includes('cari') || q.includes('berita') || q.includes('search') || q.includes('terbaru') || q.includes('info')) {
+      category = 'DATA_RETRIEVAL';
+      targetCapability = 'web_research';
+      primaryGoal = 'Pencarian informasi terkini dari web secara faktual dengan verifikasi multi-sumber.';
+      implicitConstraints.push('Klaim penting harus didukung sumber yang dapat ditelusuri (provenance).');
+      antiLazinessDirectives.push('Sajikan sumber rujukan dan konteks waktu yang jelas.');
+
+      thesisThought = `Argumen Horizon: Membutuhkan data aktual dari web terbuka untuk menjawab pertanyaan spesifik user.`;
+      veritasCritique = `Sanggahan Veritas: Tolak halusinasi tanggal atau klaim usang. Pastikan informasi diverifikasi silang.`;
+      apexStrategy = `Strategi Apex: Alokasikan ke SearchEngine untuk penelusuran web real-time.`;
+
+      primaryEngine = 'SearchEngine';
+      candidateEngines = ['SearchEngine', 'KnowledgeLab'];
+      engineSequence = ['SearchEngine', 'VerificationEngine'];
+      justification = 'Memerlukan pengambilan data eksternal dari web live.';
+      factualConfidence = 95;
+    } else if (q.includes('riset') || q.includes('ilmiah') || q.includes('laboratorium') || q.includes('hipotesis') || q.includes('skripsi') || q.includes('tesis')) {
+      category = 'CAPABILITY_EXECUTION';
+      targetCapability = 'scientific_research';
+      primaryGoal = 'Riset ilmiah empiris dengan metodologi deduktif, perumusan hipotesis falsifiabel, dan telaah pustaka.';
+      implicitConstraints.push('Wajib mengikuti struktur IMRaD (Introduction, Methods, Results, Discussion).');
+      implicitConstraints.push('Klaim empiris harus terbebas dari bias spekulatif.');
+      antiLazinessDirectives.push('Paparkan variabel kontrol, variabel bebas, dan metodologi pengujian secara utuh.');
+      
+      thesisThought = `Argumen Horizon: Kita perlu merumuskan kerangka teoretis dan rancangan eksperimen bertahap untuk membuktikan hipotesis secara metodologis.`;
+      veritasCritique = `Sanggahan Veritas: Tolak klaim kausalitas tanpa uji kontrol yang memadai. Pisahkan dengan tegas antara premis teoretis vs bukti observasional yang terkonfirmasi.`;
+      apexStrategy = `Strategi Apex: Alokasikan ke AutonomousScientificLab dan KnowledgeLab untuk validasi penalaran saintifik.`;
+      
+      primaryEngine = 'AutonomousScientificLab';
+      candidateEngines = ['AutonomousScientificLab', 'KnowledgeLab', 'DocumentEngine'];
+      engineSequence = ['AutonomousScientificLab', 'UncertaintyEngine', 'DocumentEngine'];
+      justification = 'Membutuhkan simulasi in-silico, uji falsifikasi hipotesis, dan format dokumentasi IMRaD.';
+      factualConfidence = 95;
+    } else if (q.includes('kode') || q.includes('code') || q.includes('apk') || q.includes('app') || q.includes('bug') || q.includes('error') || q.includes('arsitektur') || q.includes('typescript') || q.includes('react')) {
+      category = 'CAPABILITY_EXECUTION';
+      targetCapability = 'code_engineering';
+      primaryGoal = 'Pengembangan arsitektur kode produksi, audit modul, mitigasi bug, dan kepatuhan tipe kuat.';
+      implicitConstraints.push('Semua tipe TypeScript harus kuat, dilarang menggunakan any sembarangan.');
+      implicitConstraints.push('Struktur modular harus dipatuhi, hindari penumpukan logika di satu berkas.');
+      antiLazinessDirectives.push('Tulis implementasi kode lengkap tanpa memotong bagian penting.');
+      
+      thesisThought = `Argumen Horizon: Usulkan refaktor/implementasi terarah dengan penelusuran call-stack dan modularitas file.`;
+      veritasCritique = `Sanggahan Veritas: Jangan asal menambal bug pada lapisan permukaan. Telusuri Root Cause dan First Failure point agar tidak menciptakan regresi pada dependency lain.`;
+      apexStrategy = `Strategi Apex: Jalankan pipeline ProjectMapEngine ➔ CodingEngine ➔ VerificationEngine untuk validasi sintaks dan type-check.`;
+      
+      primaryEngine = 'CodingEngine';
+      candidateEngines = ['CodingEngine', 'ProjectMapEngine', 'AIStudioAppBuilderEngine'];
+      engineSequence = ['ProjectMapEngine', 'ImpactAnalyzer', 'CodingEngine', 'VerificationEngine'];
+      justification = 'Memerlukan analisis dampak dependensi file proyek dan kompilasi bebas error.';
       factualConfidence = 98;
-      prohibitedAssumptions.push('Dilarang menyebutkan harga yang belum diverifikasi dari feed WebSocket/REST API.');
+    } else if (q.includes('gambar') || q.includes('lukis') || q.includes('foto') || q.includes('image') || q.includes('visual')) {
+      category = 'CAPABILITY_EXECUTION';
+      targetCapability = 'image_generation';
+      primaryGoal = 'Sintesis visual fotorealistik beresolusi tinggi dengan komposisi pencahayaan dan detail anatomis presisi.';
+      implicitConstraints.push('Pertahankan integritas morfologi asli tanpa menambahkan atribut manusia palsu pada objek fauna/biologis.');
+      primaryEngine = 'ImageEngine';
+      candidateEngines = ['ImageEngine', 'LocalDreamImageEngine'];
+      engineSequence = ['ImageEngine', 'VerificationEngine'];
+      justification = 'Membutuhkan rendering visual fotorealistik multi-modal.';
+      factualConfidence = 95;
+    } else if (q.includes('video') || q.includes('animasi') || q.includes('cinematic')) {
+      category = 'CAPABILITY_EXECUTION';
+      targetCapability = 'video_generation';
+      primaryGoal = 'Sintesis gerak video sinematik dengan kontinuitas temporal dinamis.';
+      primaryEngine = 'VideoEngine';
+      candidateEngines = ['VideoEngine'];
+      engineSequence = ['VideoEngine', 'VerificationEngine'];
+      justification = 'Membutuhkan komputasi gerak temporal video.';
+      factualConfidence = 95;
+    } else if (q.includes('audio') || q.includes('musik') || q.includes('suara') || q.includes('lagu')) {
+      category = 'CAPABILITY_EXECUTION';
+      targetCapability = 'audio_generation';
+      primaryGoal = 'Komposisi audio dan sintesis gelombang suara akustik berkualitas studio.';
+      primaryEngine = 'AudioEngine';
+      candidateEngines = ['AudioEngine'];
+      engineSequence = ['AudioEngine', 'VerificationEngine'];
+      justification = 'Membutuhkan pemrosesan sinyal harmonik audio.';
+      factualConfidence = 95;
+    } else if (q.includes('keamanan') || q.includes('security') || q.includes('audit') || q.includes('vulnerability') || q.includes('sanitize')) {
+      category = 'CAPABILITY_EXECUTION';
+      targetCapability = 'security_audit';
+      primaryGoal = 'Audit keamanan zero-trust, sanitasi payload, dan deteksi kerentanan.';
+      primaryEngine = 'NavixShield';
+      candidateEngines = ['NavixShield'];
+      engineSequence = ['NavixShield', 'VerificationEngine'];
+      justification = 'Membutuhkan sanitasi zero-trust dan inspeksi kerentanan payload.';
+      factualConfidence = 99;
     }
 
+    // Arbiter Pilgun (Pilihan Ganda): Mengevaluasi seluruh kandidat Navix Core vs Open-Source GitHub
+    let pilgunDetail: PilgunSelectionResult | undefined;
+    if (targetCapability) {
+      try {
+        pilgunDetail = globalToolSelector.selectOptimalEngine(targetCapability, { query: userQuery });
+        if (pilgunDetail && pilgunDetail.selectedEngine !== 'CAPABILITY_NOT_AVAILABLE') {
+          primaryEngine = pilgunDetail.selectedEngine;
+          candidateEngines = pilgunDetail.evaluations.map(e => e.engineName);
+          if (pilgunDetail.selectedType === 'OPEN_SOURCE_GITHUB' || pilgunDetail.evaluations.some(e => e.type === 'OPEN_SOURCE_GITHUB')) {
+            evaluatesOpenSource = true;
+            openSourceRationale = pilgunDetail.rationale;
+          }
+          apexStrategy = `Strategi Apex (Arbiter Pilgun): Evaluasi ${pilgunDetail.evaluations.length} kandidat untuk kapabilitas "${targetCapability}". Terpilih: ${primaryEngine} (${pilgunDetail.selectedType}). ${pilgunDetail.rationale}`;
+          justification = pilgunDetail.rationale;
+        }
+      } catch (e: any) {
+        console.warn('[DeliberationCouncilEngine] Pilgun selection fallback:', e?.message || e);
+      }
+    }
+
+    // 1. Argumen Horizon (Tesis)
+    dialogueLog.push({
+      agentId: 'agent_intent_auditor',
+      agentName: 'Agent Horizon (Intent Deconstructor)',
+      role: 'Tesis & Dekonstruksi Masalah',
+      thought: thesisThought,
+      critique: 'Model AI rentan memberi respons template dangkal jika tidak diinstruksikan dengan batasan ketat.',
+      recommendation: `Terapkan ${antiLazinessDirectives.length} direktif anti-malas. Kunci maksud user pada resolusi tertinggi.`,
+      timestamp: timestamp + 20
+    });
+
+    // 2. Argumen Veritas (Antitesis / Devil's Advocate)
     dialogueLog.push({
       agentId: 'agent_fact_checker',
-      agentName: 'Agent Veritas (Fact Checker)',
-      role: 'Pembasmi Halusinasi & Anti-Ngawur',
-      thought: `Memeriksa risiko halusinasi untuk topik ini. Risiko terdeteksi: ${hallucinationRisk}. Kepercayaan faktual: ${factualConfidence}%.`,
-      critique: 'Jika model AI menjawab tanpa referensi data empiris mesin, jawaban berpotensi melantur (ngawur).',
-      recommendation: 'Wajibkan verifikasi silang via data mesin spesialis sebelum memfinalisasi teks jawaban.',
+      agentName: 'Agent Veritas (Adversarial Fact Checker)',
+      role: 'Antitesis & Uji Ketahanan Logika',
+      thought: `Memeriksa validitas data & klaim: ${veritasCritique} Risiko halusinasi: ${hallucinationRisk}. Kepercayaan faktual: ${factualConfidence}%.`,
+      critique: 'Jika jawaban tidak didukung bukti empiris atau verifikasi silang, kesimpulan berisiko cacat logika.',
+      recommendation: 'Wajibkan uji silang logika dan data mesin sebelum menetapkan kesimpulan final.',
       timestamp: timestamp + 50
     });
 
-    // 3. Agent Apex: Pencocokan Mesin Pokok
-    let primaryEngine = 'AdaptiveReasoningEngine';
-    let engineSequence: string[] = ['Supervisor', 'ThinkingEngine'];
-    let justification = 'Tugas analitis umum, dieksekusi dengan sintesis penalaran adaptif.';
-
-    if (q.includes('trading') || q.includes('crypto') || q.includes('forex') || q.includes('gold') || q.includes('xauusd')) {
-      primaryEngine = 'TradingEngine';
-      engineSequence = ['TradingEngine', 'VolatilitySentinel', 'SignalEngine'];
-      justification = 'Membutuhkan data klines Binance/TradingView real-time dan proteksi anomali volatilitas ekstrem.';
-    } else if (q.includes('riset') || q.includes('ilmiah') || q.includes('laboratorium') || q.includes('hipotesis') || q.includes('skripsi') || q.includes('tesis')) {
-      primaryEngine = 'AutonomousScientificLab';
-      engineSequence = ['AutonomousScientificLab', 'UncertaintyEngine', 'DocumentEngine'];
-      justification = 'Membutuhkan simulasi in-silico, uji falsifikasi hipotesis, dan format dokumentasi IMRaD.';
-    } else if (q.includes('fotorealis') || q.includes('gambar asli') || (q.includes('foto') && q.includes('asli'))) {
-      primaryEngine = 'PhotorealismEngine';
-      engineSequence = ['PhotorealismEngine', 'ImageEngine'];
-      justification = 'Membutuhkan kalibrasi lensa optik kamera DSLR 50mm f/1.4 dan mikro-tekstur pori wajah alami.';
-    } else if (q.includes('apk') || q.includes('mobile') || q.includes('android') || q.includes('kuota') || q.includes('baterai')) {
-      primaryEngine = 'MobileEdgeOptimizer';
-      engineSequence = ['MobileEdgeOptimizer', 'AIStudioAppBuilderEngine'];
-      justification = 'Memerlukan optimasi profil bandwidth edge Android dan kompresi token efisien.';
-    } else if (q.includes('kode') || q.includes('code') || q.includes('bug') || q.includes('error') || q.includes('arsitektur')) {
-      primaryEngine = 'CodingEngine';
-      engineSequence = ['ProjectMapEngine', 'ImpactAnalyzer', 'CodingEngine', 'VerificationEngine'];
-      justification = 'Memerlukan analisis dampak dependensi file proyek dan kompilasi bebas error.';
-    } else if (q.startsWith('/mcp') || q.includes('mcp tool')) {
-      primaryEngine = 'McpSkillRouter';
-      engineSequence = ['McpSkillRouter', 'VerificationEngine'];
-      justification = 'Memerlukan protokol Model Context Protocol untuk eksekusi tool terverifikasi.';
-    }
-
+    // 3. Argumen Apex (Evaluasi Strategis & Routing)
     dialogueLog.push({
       agentId: 'agent_engine_arbitrator',
       agentName: 'Agent Apex (Machine Arbitrator)',
-      role: 'Pencocokan Mesin Pokok',
-      thought: `Mengevaluasi kapabilitas dari 32 mesin terdaftar di EngineRegistry. Mesin paling cocok: ${primaryEngine}.`,
-      critique: `Penggunaan model teks biasa tanpa mesin ${primaryEngine} akan menghasilkan jawaban medioker.`,
-      recommendation: `Alokasikan tugas ke urutan pipeline: [${engineSequence.join(' -> ')}].`,
+      role: 'Evaluasi Jalur & Arbiter Eksekusi',
+      thought: `${apexStrategy} Mesin pokok yang paling optimal: ${primaryEngine}. Evaluasi kandidat: [${candidateEngines.join(', ')}].`,
+      critique: `Pendekatan teks mentah tanpa orkestrasi mesin ${primaryEngine} akan menurunkan bobot ketepatan solusi.`,
+      recommendation: `Alokasikan eksekusi ke pipeline: [${engineSequence.join(' ➔ ')}].`,
       timestamp: timestamp + 80
     });
 
-    // 4. Agent Sovereign: Konsensus & Direktur Kualitas
-    const executionRigorScore = 98;
-    const consensusSummary = `Dewan deliberasi mencapai konsensus bulat: Permintaan user didekonstruksi secara presisi, seluruh direktif anti-malas diaktifkan, risiko halusinasi ditekan ke ${hallucinationRisk}, dan eksekusi dialihkan ke mesin pokok ${primaryEngine} (${engineSequence.join(' -> ')}). Jawaban dijamin akurat, tuntas, dan berbobot tanpa kompromi.`;
+    // 4. Keputusan Tunggal Sovereign (Konsensus & Verdict Final)
+    finalConsensus = `Dewan deliberasi menyepakati SATU KEPUTUSAN TUNGGAL TERBAIK: Seluruh argumen dewan disintesis secara dialektis, kelemahan logika ditutup oleh uji kritis Veritas, dan eksekusi diarahkan penuh ke jalur ${primaryEngine} (${engineSequence.join(' ➔ ')}). Hasil jawaban dipastikan tuntas, kokoh, dan berbobot tanpa kompromi.`;
 
     dialogueLog.push({
       agentId: 'agent_rigor_director',
       agentName: 'Agent Sovereign (Consensus Director)',
-      role: 'Direktur Konsensus & Kualitas',
-      thought: 'Mengesahkan kesepakatan dewan. Menetapkan standar jawaban: 100% tuntas, tidak ngawur, tidak nanggung, dan tervalidasi.',
-      critique: 'Tidak ada celah logika tersisa setelah perdebatan dewan.',
-      recommendation: 'Lanjutkan eksekusi dengan kepatuhan penuh pada konsensus.',
+      role: 'Direktur Konsensus & Keputusan Final',
+      thought: 'Mengevaluasi perdebatan Horizon, Veritas, dan Apex. Menetapkan keputusan bulat tunggal yang paling solid.',
+      critique: 'Tidak ada celah logika tersisa setelah perdebatan dewan disatukan.',
+      recommendation: 'Lanjutkan eksekusi ke tahap berikutnya sesuai keputusan konsensus final.',
       timestamp: timestamp + 110
     });
 
     return {
+      category,
+      requiresExternalExecution,
+      targetCapability,
       deconstructedIntent: {
         primaryGoal,
         implicitConstraints,
@@ -224,11 +424,16 @@ export class DeliberationCouncilEngine {
       },
       recommendedEngine: {
         primaryEngine,
+        candidateEngines,
+        selectedEngine: primaryEngine,
         engineSequence,
-        justification
+        justification,
+        evaluatesOpenSource,
+        openSourceRationale,
+        pilgunDetail
       },
-      executionRigorScore,
-      consensusSummary,
+      executionRigorScore: 98,
+      consensusSummary: finalConsensus,
       dialogueLog
     };
   }

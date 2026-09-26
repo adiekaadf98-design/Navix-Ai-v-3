@@ -30,27 +30,42 @@ export function ModelThinkingSelector({
 
   const models = [
     {
-      id: 'gemini-3.6-flash',
+      id: 'gemini-3.8-flash',
       name: 'Navix Flash',
-      badge: '⚡ TERPOPULER',
+      badge: '⚡ MULTI-MODEL FLASH (3.8, 3.7, 3.6, 3.5)',
       icon: Zap,
-      desc: 'Cepat & efisien. Ideal untuk percakapan sehari-hari dan eksekusi cepat.',
+      desc: 'Kelompok Navix Flash terdiri dari Gemini Flash 3.8, 3.7, 3.6, dan 3.5. Gesit, seimbang, dan tanggap.',
+      teamMembers: [
+        'Gemini 3.8 Flash — Lead Synthesis & Executive Coordinator',
+        'Gemini 3.7 Flash — Strategic Planning & Deep Context Analysis',
+        'Gemini 3.6 Flash — Intent Deconstruction & Task Breakdown',
+        'Gemini 3.5 Flash — Fast Verification & Cross-Check Auditor'
+      ],
       defaultEffort: 'medium'
     },
     {
       id: 'gemini-3.1-pro-preview',
       name: 'Navix Pro',
-      badge: '🧠 PENALARAN TINGGI',
+      badge: '🧠 MULTI-MODEL PRO (3.6, 3.7 & 3.1 PRO)',
       icon: Brain,
-      desc: 'Sangat cerdas. Dirancang untuk logika rumit, coding, sains, & analisis bisnis.',
+      desc: 'Kelompok Navix Pro terdiri dari Gemini Flash 3.6, Gemini Flash 3.7, dan Gemini 3.1 Pro. Penalaran arsitektural kognitif tingkat tinggi.',
+      teamMembers: [
+        'Gemini 3.1 Pro — Deep Architecture, STEM & Mathematical Reasoning',
+        'Gemini 3.7 Flash — Strategic System Co-Planner & Logic Evaluator',
+        'Gemini 3.6 Flash — Deconstruction & Boundary Constraint Auditor'
+      ],
       defaultEffort: 'high'
     },
     {
       id: 'gemini-3.1-flash-lite',
       name: 'Navix Lite',
-      badge: '💨 ULTRA FAST',
+      badge: '💨 MULTI-MODEL LITE (ALL FLASH LITE SERIES)',
       icon: Cpu,
-      desc: 'Ringan dan hemat kuota. Respons kilat untuk tugas-tugas sederhana.',
+      desc: 'Kelompok Navix Lite terdiri dari seluruh varian Gemini Flash Lite (3.1 Flash-Lite, Flash-Lite Latest) yang dimiliki AI Studio. Ultra-ringan, hemat kuota, dan gesit.',
+      teamMembers: [
+        'Gemini 3.1 Flash-Lite — Lead High-Speed Response Generator',
+        'Gemini Flash-Lite Latest — Rapid Parameter & Entity Extractor'
+      ],
       defaultEffort: 'low'
     }
   ];
@@ -184,7 +199,17 @@ export function ModelThinkingSelector({
                             {m.badge}
                           </span>
                         </div>
-                        <p className="text-xs text-neutral-400 leading-relaxed">{m.desc}</p>
+                        <p className="text-xs text-neutral-400 leading-relaxed mb-2">{m.desc}</p>
+                        
+                        {/* Sub-Model Collaborative Team Breakdown */}
+                        <div className="pt-2 border-t border-neutral-800/80 grid grid-cols-1 gap-1 text-[11px] text-neutral-400">
+                          {m.teamMembers.map((member, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-500/70 shrink-0" />
+                              <span className="truncate">{member}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                       <div className="pt-0.5 shrink-0">
                         <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-all ${isSelected ? 'border-blue-500 bg-blue-500 text-white' : 'border-neutral-700 bg-neutral-900'}`}>

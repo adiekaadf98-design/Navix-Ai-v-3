@@ -103,10 +103,23 @@ export class GPUWorkerService {
             else if (request.type === 'TEXT_TO_IMAGE') {
                 // FALLBACK: NO LOCAL GPU DETECTED IN CLOUD RUN, FALLING BACK TO GEMINI IMAGEN
                 const rawPrompt = request.prompt || 'A scenic landscape';
-                // Enforce STRICT anti-CGI/cartoon photorealism
+                const p = rawPrompt.toLowerCase();
+                const isArt = /\b(kartun|cartoon|anime|3d|ilustrasi|illustration|painting|drawing|sketch)\b/i.test(p);
                 let prompt = rawPrompt;
-                if (!rawPrompt.toLowerCase().includes('kartun') && !rawPrompt.toLowerCase().includes('anime') && !rawPrompt.toLowerCase().includes('3d') && !rawPrompt.toLowerCase().includes('ilustrasi')) {
-                    prompt = `${rawPrompt}. Authentic raw amateur photography, unedited candid shot, taken on Fujifilm XT4, 35mm lens, visible natural skin texture, uneven skin, real human pores, highly detailed, photorealistic. ABSOLUTELY NO 3D render, NO plastic skin, NO CGI, NO artificial lighting, ultra-realistic.`;
+                if (!isArt) {
+                    const isBio = /\b(sel|darah|bakteri|virus|dna|rna|kloroplas|neuron|mikroskop|cell|microscopic)\b/i.test(p);
+                    const isAnimal = !isBio && /\b(kucing|anjing|hewan|binatang|burung|ikan|hiu|singa|harimau|gajah|kuda|bunglon|ular|katak|animal|wildlife|bird|fish|tiger|cat|dog)\b/i.test(p);
+                    const isHuman = !isBio && !isAnimal && /\b(manusia|orang|person|human|wajah|pria|wanita|gadis|cowok|cewek|anak|portrait)\b/i.test(p);
+
+                    if (isBio) {
+                        prompt = `${rawPrompt}. Authentic scientific visualization, accurate biological morphology, natural lighting, high optical clarity.`;
+                    } else if (isAnimal) {
+                        prompt = `${rawPrompt}. Authentic wildlife photography, natural animal anatomy and morphology, natural habitat, realistic lighting.`;
+                    } else if (isHuman) {
+                        prompt = `${rawPrompt}. Authentic natural photography, unposed candid shot, natural human anatomy, realistic skin tones, natural lighting.`;
+                    } else {
+                        prompt = `${rawPrompt}. Authentic natural photography, natural textures, realistic lighting.`;
+                    }
                 }
 
                 if (!this.ai) {

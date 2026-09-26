@@ -10,14 +10,15 @@ export class ModelRegistryService {
     private models: Map<string, ModelInfo> = new Map();
 
     constructor() {
-        // FREE FIRST - Gemini models
-        this.registerModel({ id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash', capabilities: ['TEXT_TO_TEXT', 'DOCUMENT_PROCESSING', 'IMAGE_UNDERSTANDING'], status: 'AVAILABLE_FREE', provider: 'google' });
-        this.registerModel({ id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', capabilities: ['TEXT_TO_TEXT', 'DOCUMENT_PROCESSING', 'IMAGE_UNDERSTANDING'], status: 'AVAILABLE_FREE', provider: 'google' });
-        this.registerModel({ id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite', capabilities: ['TEXT_TO_TEXT', 'IMAGE_UNDERSTANDING', 'VIDEO_UNDERSTANDING'], status: 'AVAILABLE_FREE', provider: 'google' });
+        // FREE FIRST - Google AI Studio Newest Models
+        this.registerModel({ id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash (Flagship Terbaru)', capabilities: ['TEXT_TO_TEXT', 'DOCUMENT_PROCESSING', 'IMAGE_UNDERSTANDING'], status: 'AVAILABLE_FREE', provider: 'google' });
+        this.registerModel({ id: 'gemini-flash-latest', name: 'Gemini Flash Latest', capabilities: ['TEXT_TO_TEXT', 'DOCUMENT_PROCESSING', 'IMAGE_UNDERSTANDING'], status: 'AVAILABLE_FREE', provider: 'google' });
+        this.registerModel({ id: 'gemini-3.1-pro-preview', name: 'Gemini 3.1 Pro Preview (Deep Reasoning)', capabilities: ['TEXT_TO_TEXT', 'DOCUMENT_PROCESSING', 'IMAGE_UNDERSTANDING', 'CODE_GENERATION'], status: 'AVAILABLE_FREE', provider: 'google' });
+        this.registerModel({ id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite (Ultra Fast)', capabilities: ['TEXT_TO_TEXT', 'IMAGE_UNDERSTANDING', 'VIDEO_UNDERSTANDING'], status: 'AVAILABLE_FREE', provider: 'google' });
         
-        // These might be available via Vertex or Gemini APIs
-        this.registerModel({ id: 'gemini-3.1-flash-image', name: 'Imagen 3.0 via Flash', capabilities: ['TEXT_TO_IMAGE'], status: 'AVAILABLE_FREE', provider: 'google' });
-        this.registerModel({ id: 'veo-2.0-generate-001', name: 'Veo Video Generation', capabilities: ['TEXT_TO_VIDEO'], status: 'AVAILABLE_FREE', provider: 'google' });
+        // Multimodal Models (Image & Video)
+        this.registerModel({ id: 'gemini-3.1-flash-image', name: 'Gemini 3.1 Flash Image', capabilities: ['TEXT_TO_IMAGE'], status: 'AVAILABLE_FREE', provider: 'google' });
+        this.registerModel({ id: 'veo-3.1-lite-generate-preview', name: 'Veo 3.1 Lite Video Generation', capabilities: ['TEXT_TO_VIDEO'], status: 'AVAILABLE_FREE', provider: 'google' });
         
         // PAID / NOT AVAILABLE
         this.registerModel({ id: 'flux-1-dev', name: 'Flux.1 Dev', capabilities: ['TEXT_TO_IMAGE'], status: 'NOT_INSTALLED', provider: 'external-gpu' });

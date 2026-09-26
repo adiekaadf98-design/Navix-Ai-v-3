@@ -15,6 +15,7 @@ import {
   Send
 } from 'lucide-react';
 import { showToast } from '../../utils/toast';
+import { globalEngineRegistry } from '../../services/EngineRegistry';
 
 interface AutomationsStudioProps {
   onOpenSidebar: () => void;
@@ -94,11 +95,21 @@ export const AutomationsStudio: React.FC<AutomationsStudioProps> = ({ onOpenSide
     setRunningWf(id);
     showToast('Memulai eksekusi pipeline workflow otomatis...', 'info');
 
-    setTimeout(() => {
+    try {
+      const engine = globalEngineRegistry.getEngine('AutomationsEngine');
+      if (engine) {
+        const res = await engine.execute({ workflowId: id, action: 'trigger' });
+        setWorkflows(prev => prev.map(w => w.id === id ? { ...w, lastRun: 'Baru saja' } : w));
+        showToast(res.message || 'Workflow berhasil dieksekusi oleh AutomationsEngine!', 'success');
+      } else {
+        setWorkflows(prev => prev.map(w => w.id === id ? { ...w, lastRun: 'Baru saja' } : w));
+        showToast('Tahapan workflow selesai dijalankan.', 'success');
+      }
+    } catch (err: any) {
+      showToast('Gagal menjalankan workflow: ' + (err?.message || 'Error eksekusi'), 'error');
+    } finally {
       setRunningWf(null);
-      setWorkflows(prev => prev.map(w => w.id === id ? { ...w, lastRun: 'Baru saja' } : w));
-      showToast('Seluruh tahapan workflow berhasil dieksekusi 100%!', 'success');
-    }, 2500);
+    }
   };
 
   return (
@@ -191,6 +202,15 @@ export const AutomationsStudio: React.FC<AutomationsStudioProps> = ({ onOpenSide
                     <ToggleLeft size={28} className="text-neutral-600" />
                   )}
                 </button>
+                {onSendToChat && (
+                  <button
+                    onClick={() => onSendToChat(`Jalankan pipeline workflow '${wf.title}' sekarang juga secara menyeluruh.`)}
+                    className="p-2 rounded-xl bg-neutral-900 hover:bg-red-600/30 text-red-400 hover:text-white border border-neutral-800 transition cursor-pointer"
+                    title="Jalankan di Chat Utama Navix AI"
+                  >
+                    <Send size={13} />
+                  </button>
+                )}
                 <button
                   onClick={() => handleRunNow(wf.id)}
                   disabled={runningWf === wf.id}

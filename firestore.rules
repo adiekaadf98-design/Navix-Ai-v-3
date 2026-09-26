@@ -1,11 +1,57 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // [DEVELOPMENT / TRUE BYPASS] 
-    // Allowing all read/writes globally so the local stealth bypass works flawlessly
-    // without requiring Firebase Authentication to be fully configured.
-    match /{document=**} {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.token.email == 'adiekaadf98@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Public test connection endpoint for SDK health checks
+    match /test/{document=**} {
+      allow read: if true;
+      allow write: if signedIn();
+    }
+
+    // User profiles and all user-owned data (sessions, messages, settings, mediaVault)
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if isOwner(uid) || isAdmin();
+
+      match /{allSubcollections=**} {
+        allow read, write: if isOwner(uid) || isAdmin();
+      }
+    }
+
+    // Transactions
+    match /transactions/{txId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Daily usage tracking
+    match /usage/{uid}/daily/{date} {
       allow read, write: if true;
+    }
+
+    // Centralized API keys
+    match /api_keys/{keyId} {
+      allow read, write: if isAdmin();
     }
   }
 }
+

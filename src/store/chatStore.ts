@@ -211,7 +211,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       content: '',
       timestamp: Date.now() + 50,
       isThinking: true,
-      modelUsed: 'gemini-3.6-flash'
+      modelUsed: 'gemini-3.8-flash'
     };
 
     set((state) => {
@@ -258,7 +258,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         headers,
         body: JSON.stringify({
           message: content,
-          model: 'gemini-3.6-flash',
+          model: (typeof localStorage !== 'undefined' && localStorage.getItem('navix_selected_model')) || 'gemini-3.1-flash-lite',
           history: geminiContents,
           disableTts: true,
           thinkingMode: activeMode === 'deep_thinking'

@@ -211,17 +211,29 @@ export const ProjectsIsolationStudio: React.FC<ProjectsIsolationStudioProps> = (
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleSelectProject(proj.id, proj.name)}
-                  disabled={isActive}
-                  className={`w-full py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
-                    isActive
-                      ? 'bg-blue-600/20 text-blue-300 border border-blue-500/40 cursor-default'
-                      : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800'
-                  }`}
-                >
-                  {isActive ? 'Ruang Kerja Aktif Saat Ini' : 'Beralih ke Proyek Ini'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleSelectProject(proj.id, proj.name)}
+                    disabled={isActive}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer ${
+                      isActive
+                        ? 'bg-blue-600/20 text-blue-300 border border-blue-500/40 cursor-default'
+                        : 'bg-neutral-900 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-800'
+                    }`}
+                  >
+                    {isActive ? 'Ruang Kerja Aktif Saat Ini' : 'Beralih ke Proyek Ini'}
+                  </button>
+                  {onSendToChat && (
+                    <button
+                      onClick={() => onSendToChat(`Gunakan konteks sandbox isolasi proyek '${proj.name}' untuk sesi ini.`)}
+                      className="p-2.5 rounded-xl bg-neutral-900 hover:bg-blue-600 text-blue-400 hover:text-white border border-neutral-800 transition cursor-pointer shrink-0"
+                      title="Kirim konteks proyek ke Chat Utama"
+                    >
+                      <Send size={14} />
+                    </button>
+                  )}
+                </div>
+
               </div>
             );
           })}

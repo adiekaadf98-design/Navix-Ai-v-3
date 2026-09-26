@@ -1,10 +1,88 @@
 import { useState, useRef, useEffect } from 'react';
-import { ArrowUp, StopCircle, Paperclip, Mic, X, Video, Film, Image as ImageIcon, ChevronDown, Sparkles, ArrowDown, TrendingUp, Search, Zap, Shield, CreditCard } from 'lucide-react';
+import { 
+  ArrowUp, StopCircle, Plus, Mic, X, Video, Film, Image as ImageIcon, 
+  ChevronDown, Sparkles, ArrowDown, TrendingUp, Search, Zap, Shield, 
+  CreditCard, Camera, HardDrive, Compass, Beaker, CheckSquare, Upload
+} from 'lucide-react';
 import { Attachment } from '../types';
 import { EffortLevel } from '../services/ThinkingEngine';
 import { ModelThinkingSelector } from './ModelThinkingSelector';
 import { useAuthStore } from '../store/useAuthStore';
 import { QuotaService } from '../services/quotaService';
+
+interface PlusToolItem {
+  id: string;
+  label: string;
+  tag: string;
+  desc: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}
+
+const PLUS_MENU_ITEMS: PlusToolItem[] = [
+  {
+    id: 'trading',
+    label: 'Trading',
+    tag: '@trading',
+    desc: 'Analisis pasar live, data teknikal & sinyal Gold/Crypto/Forex',
+    icon: TrendingUp
+  },
+  {
+    id: 'image',
+    label: 'Image and Edit',
+    tag: '@image',
+    desc: 'Pembuatan & pengeditan visual fotorealistis AI',
+    icon: ImageIcon
+  },
+  {
+    id: 'video',
+    label: 'Video and Edit',
+    tag: '@video',
+    desc: 'Neural cinematic video clips & studio gerak',
+    icon: Video
+  },
+  {
+    id: 'stock',
+    label: 'Stok Foto',
+    tag: '@stok_foto',
+    desc: 'Pustaka stok gambar inspirasi internal Navix AI',
+    icon: Camera
+  },
+  {
+    id: 'skill',
+    label: 'Skill',
+    tag: '@skill',
+    desc: 'Aktifkan kapabilitas alat cerdas & MCP engine',
+    icon: Zap
+  },
+  {
+    id: 'pilgun',
+    label: 'Pilgun',
+    tag: '@pilgun',
+    desc: 'Generator latihan soal pilihan ganda interaktif',
+    icon: CheckSquare
+  },
+  {
+    id: 'drive',
+    label: 'Drive',
+    tag: '@drive',
+    desc: 'Akses & sinkronisasi dokumen Google Drive',
+    icon: HardDrive
+  },
+  {
+    id: 'map',
+    label: 'Map',
+    tag: '@map',
+    desc: 'Geolokasi, rute, radar & pemetaan satelit',
+    icon: Compass
+  },
+  {
+    id: 'penelitian',
+    label: 'Penelitian',
+    tag: '@penelitian',
+    desc: 'Autonomous Scientific Lab & riset akademis',
+    icon: Beaker
+  }
+];
 
 const TRADING_SUGGESTIONS = [
   "Analisis teknikal",
@@ -51,7 +129,7 @@ export function ChatInput({
   onSendMessage, 
   isLoading, 
   showErrorBox,
-  selectedModel = 'gemini-3.6-flash',
+  selectedModel = 'gemini-3.8-flash',
   onModelChange,
   effortLevel = 'medium',
   setEffortLevel,
@@ -73,6 +151,8 @@ export function ChatInput({
 
   const [input, setInput] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isRefVideoPanelOpen, setIsRefVideoPanelOpen] = useState(false);
   const [isModelModalOpen, setIsModelModalOpen] = useState(false);
@@ -86,8 +166,46 @@ export function ChatInput({
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+  const plusButtonRef = useRef<HTMLButtonElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        plusMenuRef.current && 
+        !plusMenuRef.current.contains(e.target as Node) &&
+        plusButtonRef.current &&
+        !plusButtonRef.current.contains(e.target as Node)
+      ) {
+        setIsPlusMenuOpen(false);
+      }
+    };
+    if (isPlusMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isPlusMenuOpen]);
+
+  const handleToggleTag = (tag: string) => {
+    setActiveTags(prev => {
+      if (prev.includes(tag)) {
+        return prev.filter(t => t !== tag);
+      }
+      return [...prev, tag];
+    });
+    setIsPlusMenuOpen(false);
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setActiveTags(prev => prev.filter(t => t !== tag));
+  };
 
   const getModelDisplayName = (modelId: string) => {
     const id = (modelId || '').toLowerCase();
@@ -114,7 +232,7 @@ export function ChatInput({
   };
 
   const handleSubmit = () => {
-    if ((!input.trim() && attachments.length === 0 && !refVideo && !refImage) || isLoading) return;
+    if ((!input.trim() && attachments.length === 0 && !refVideo && !refImage && activeTags.length === 0) || isLoading) return;
     
     const finalAttachments = [...attachments];
     if (refImage) {
@@ -124,12 +242,20 @@ export function ChatInput({
       finalAttachments.push(refVideo);
     }
     
-    onSendMessage(input.trim(), finalAttachments);
+    let messageText = input.trim();
+    if (activeTags.length > 0) {
+      const tagPrefix = activeTags.join(' ');
+      messageText = messageText ? `${tagPrefix} ${messageText}` : tagPrefix;
+    }
+
+    onSendMessage(messageText, finalAttachments);
     setInput('');
     setAttachments([]);
+    setActiveTags([]);
     setRefVideo(null);
     setRefImage(null);
     setIsRefVideoPanelOpen(false);
+    setIsPlusMenuOpen(false);
     
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -319,8 +445,8 @@ export function ChatInput({
   };
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/90 to-transparent pt-20 shrink-0 z-20">
-      <div className="max-w-3xl mx-auto pb-safe">
+    <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 md:p-4 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/90 to-transparent pt-3 sm:pt-6 md:pt-8 shrink-0 z-20 pointer-events-none">
+      <div className="max-w-3xl mx-auto pb-safe pointer-events-auto">
         {attachments.length > 0 && (
           <div className="mb-3 flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
             {attachments.map((att, i) => (
@@ -432,7 +558,7 @@ export function ChatInput({
           </div>
         )}
         
-        <div className="flex justify-between items-center mb-2 px-2 text-[10px] font-mono text-neutral-500 uppercase tracking-wider">
+        <div className="hidden sm:flex justify-between items-center mb-2 px-2 text-[10px] font-mono text-neutral-500 uppercase tracking-wider">
           <div className="flex flex-wrap items-center gap-1.5 text-neutral-600">
             <span className="hidden sm:inline">Shortcuts:</span>
             <kbd className="px-1 py-0.5 rounded bg-neutral-900 border border-neutral-800 text-neutral-400 font-mono text-[9px]">Enter</kbd>
@@ -516,6 +642,33 @@ export function ChatInput({
             accept="image/*"
           />
           
+          {/* Active Tool / Feature Mention Chips (Minimalist pure text without boxes) */}
+          {activeTags.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2.5 mb-1 px-1 pt-0.5">
+              {activeTags.map((tag) => {
+                const item = PLUS_MENU_ITEMS.find((t) => t.tag === tag);
+                const IconComp = item ? item.icon : Sparkles;
+                return (
+                  <div
+                    key={tag}
+                    className="inline-flex items-center gap-1.5 text-xs text-neutral-300 font-medium py-0.5 animate-in fade-in duration-150 select-none"
+                  >
+                    <IconComp size={13} className="text-neutral-400 shrink-0" />
+                    <span className="text-neutral-200">{item ? `@${item.label}` : tag}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="text-neutral-400 hover:text-white transition-colors ml-0.5 cursor-pointer p-0.5"
+                      title={`Hapus ${tag}`}
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* Row 1: Textarea */}
           <textarea
             ref={textareaRef}
@@ -529,16 +682,94 @@ export function ChatInput({
           />
 
           {/* Row 2: Claude-style Single-Line Action Toolbar */}
-          <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-neutral-800/40 gap-1.5">
+          <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-neutral-800/40 gap-1.5 relative">
+            {/* Popover Menu for + Button */}
+            {isPlusMenuOpen && (
+              <div 
+                ref={plusMenuRef}
+                className="absolute bottom-[calc(100%+10px)] left-0 w-[290px] sm:w-[330px] bg-[#14151a] border border-neutral-800 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl"
+              >
+                {/* 1. Header / Upload Galeri Biasa */}
+                <div className="p-2 border-b border-neutral-800/80">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPlusMenuOpen(false);
+                      fileInputRef.current?.click();
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-neutral-800/60 transition-all group cursor-pointer"
+                  >
+                    <div className="w-6 h-6 flex items-center justify-center text-neutral-400 group-hover:text-neutral-100 shrink-0">
+                      <Upload size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium text-neutral-200 group-hover:text-white transition-colors">
+                        Ambil dari Galeri / File
+                      </div>
+                      <p className="text-[11px] text-neutral-400 truncate mt-0.5">Upload foto, video, audio dari perangkat</p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* 2. Daftar Modul Cerdas Tambahan */}
+                <div className="p-1.5 max-h-[320px] overflow-y-auto custom-scrollbar">
+                  <div className="px-3 py-1 text-[10px] font-mono text-neutral-500 uppercase tracking-wider">
+                    PILIH MODUL / FITUR CERDAS:
+                  </div>
+                  <div className="space-y-0.5 mt-0.5">
+                    {PLUS_MENU_ITEMS.map((item) => {
+                      const IconComp = item.icon;
+                      const isSelected = activeTags.includes(item.tag);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleToggleTag(item.tag)}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all group cursor-pointer ${
+                            isSelected 
+                              ? 'bg-neutral-800/80 text-white' 
+                              : 'hover:bg-neutral-800/50 text-neutral-300'
+                          }`}
+                        >
+                          <div className="w-6 h-6 flex items-center justify-center text-neutral-400 group-hover:text-neutral-100 shrink-0">
+                            <IconComp size={18} />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-xs font-medium text-neutral-200 group-hover:text-white truncate">
+                                {item.label}
+                              </span>
+                              <span className="text-[11px] font-mono text-neutral-400 group-hover:text-neutral-300 shrink-0">
+                                {item.tag}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-neutral-400 truncate mt-0.5">
+                              {item.desc}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Left toolbar tools: Attachment, Model Selector, Video Ref */}
             <div className="flex items-center gap-1 sm:gap-1.5 shrink min-w-0">
               <button 
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/70 rounded-full transition-colors shrink-0"
-                title="Lampirkan Foto / File"
+                id="btn-chat-attach-plus"
+                ref={plusButtonRef}
+                onClick={() => setIsPlusMenuOpen(!isPlusMenuOpen)}
+                className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded-full transition-colors shrink-0 cursor-pointer ${
+                  isPlusMenuOpen 
+                    ? 'bg-neutral-800 text-neutral-200 border border-neutral-700' 
+                    : 'text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800/80'
+                }`}
+                title="Tambah Lampiran, Foto, atau Modul AI"
               >
-                <Paperclip size={17} />
+                <Plus size={18} className={`stroke-[2.2] transition-transform duration-200 ${isPlusMenuOpen ? 'rotate-45' : ''}`} />
               </button>
 
               {/* Model & Thinking Level Selector Button (Claude style) */}
@@ -583,7 +814,7 @@ export function ChatInput({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={(!input.trim() && attachments.length === 0 && !refVideo) || isLoading}
+                disabled={(!input.trim() && attachments.length === 0 && !refVideo && !refImage && activeTags.length === 0) || isLoading}
                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-neutral-100 disabled:opacity-30 hover:bg-neutral-300 disabled:hover:bg-neutral-100 flex items-center justify-center text-neutral-900 transition-all cursor-pointer shadow-sm shrink-0"
                 aria-label="Kirim Pesan"
               >

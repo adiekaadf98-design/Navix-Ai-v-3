@@ -164,20 +164,34 @@ export async function editSovereignImage(
   prompt: string
 ): Promise<{ success: boolean; imageBase64?: string; error?: string }> {
   // If filter operation like grayscale, invert, blur: process locally with FFmpeg
-  if (imageInput && imageInput.startsWith('data:') && ['image_grayscale', 'image_invert', 'image_blur'].includes(operation)) {
+  if (imageInput && ['image_grayscale', 'image_invert', 'image_blur'].includes(operation)) {
     const tmpIn = path.join(TMP_DIR, `edit_in_${Date.now()}_${Math.random().toString(36).substring(2,6)}.png`);
     const tmpOut = path.join(TMP_DIR, `edit_out_${Date.now()}_${Math.random().toString(36).substring(2,6)}.png`);
     try {
-      const b64 = imageInput.split(',')[1];
-      fs.writeFileSync(tmpIn, Buffer.from(b64, 'base64'));
-      let vf = 'hue=s=0';
-      if (operation === 'image_invert') vf = 'negate';
-      if (operation === 'image_blur') vf = 'boxblur=8:1';
+      if (imageInput.startsWith('data:')) {
+        const commaIdx = imageInput.indexOf(',');
+        if (commaIdx !== -1) {
+          const b64 = imageInput.substring(commaIdx + 1).replace(/\s/g, '');
+          fs.writeFileSync(tmpIn, Buffer.from(b64, 'base64'));
+        }
+      } else if (imageInput.startsWith('http://') || imageInput.startsWith('https://')) {
+        const fetchRes = await fetch(imageInput, { signal: AbortSignal.timeout(8000) });
+        if (fetchRes.ok) {
+          const ab = await fetchRes.arrayBuffer();
+          fs.writeFileSync(tmpIn, Buffer.from(ab));
+        }
+      }
 
-      await execPromise(`ffmpeg -y -i "${tmpIn}" -vf "${vf}" "${tmpOut}"`);
-      if (fs.existsSync(tmpOut)) {
-        const outBuf = fs.readFileSync(tmpOut);
-        return { success: true, imageBase64: `data:image/png;base64,${outBuf.toString('base64')}` };
+      if (fs.existsSync(tmpIn)) {
+        let vf = 'hue=s=0';
+        if (operation === 'image_invert') vf = 'negate';
+        if (operation === 'image_blur') vf = 'boxblur=8:1';
+
+        await execPromise(`ffmpeg -y -i "${tmpIn}" -vf "${vf}" "${tmpOut}"`);
+        if (fs.existsSync(tmpOut)) {
+          const outBuf = fs.readFileSync(tmpOut);
+          return { success: true, imageBase64: `data:image/png;base64,${outBuf.toString('base64')}` };
+        }
       }
     } catch (err: any) {
       console.warn("[Sovereign Image Edit] Local filter error:", err);
@@ -208,8 +222,7 @@ export async function compositeSovereignImage(
   userPrompt: string,
   aspectRatio: string = '1:1'
 ): Promise<{ success: boolean; imageBase64?: string; error?: string }> {
-  const enhancedPrompt = `Masterpiece fashion editorial composition: ${userPrompt}, authentic candid shot, visible micro-pores and realistic skin texture, natural environmental lighting, rich textures, 8k resolution, zero plastic, zero CGI`;
-  return await generateSovereignImage(enhancedPrompt, aspectRatio);
+  return await generateSovereignImage(userPrompt, aspectRatio);
 }
 
 /**
@@ -243,10 +256,23 @@ export async function startSovereignVideoJob(
       job.progress = 25;
 
       // 1. Prepare Keyframe Image
-      if (imageInput && imageInput.startsWith('data:')) {
-        const matches = imageInput.match(/^data:([^;]+);base64,(.+)$/);
-        if (matches && matches[2]) {
-          fs.writeFileSync(framePath, Buffer.from(matches[2], 'base64'));
+      if (imageInput) {
+        if (imageInput.startsWith('data:')) {
+          const commaIdx = imageInput.indexOf(',');
+          if (commaIdx !== -1) {
+            const b64 = imageInput.substring(commaIdx + 1).replace(/\s/g, '');
+            fs.writeFileSync(framePath, Buffer.from(b64, 'base64'));
+          }
+        } else if (imageInput.startsWith('http://') || imageInput.startsWith('https://')) {
+          try {
+            const fetchRes = await fetch(imageInput, { signal: AbortSignal.timeout(8000) });
+            if (fetchRes.ok) {
+              const ab = await fetchRes.arrayBuffer();
+              fs.writeFileSync(framePath, Buffer.from(ab));
+            }
+          } catch (fErr) {
+            console.warn("[Sovereign Video Engine] Could not fetch imageInput URL:", fErr);
+          }
         }
       }
 
@@ -255,9 +281,26 @@ export async function startSovereignVideoJob(
         console.log(`[Sovereign Video Engine] Generating cinematic keyframe for: "${prompt}"...`);
         const imgResult = await generateSovereignImage(prompt, '16:9');
         if (imgResult.success && imgResult.imageBase64) {
-          const b64Data = imgResult.imageBase64.split(',')[1];
-          fs.writeFileSync(framePath, Buffer.from(b64Data, 'base64'));
-        } else {
+          if (imgResult.imageBase64.startsWith('data:')) {
+            const commaIdx = imgResult.imageBase64.indexOf(',');
+            if (commaIdx !== -1) {
+              const b64Data = imgResult.imageBase64.substring(commaIdx + 1).replace(/\s/g, '');
+              fs.writeFileSync(framePath, Buffer.from(b64Data, 'base64'));
+            }
+          } else if (imgResult.imageBase64.startsWith('http://') || imgResult.imageBase64.startsWith('https://')) {
+            try {
+              const fetchRes = await fetch(imgResult.imageBase64, { signal: AbortSignal.timeout(8000) });
+              if (fetchRes.ok) {
+                const ab = await fetchRes.arrayBuffer();
+                fs.writeFileSync(framePath, Buffer.from(ab));
+              }
+            } catch (fErr) {
+              console.warn("[Sovereign Video Engine] Could not fetch imgResult URL:", fErr);
+            }
+          }
+        }
+        
+        if (!fs.existsSync(framePath)) {
           // Generate high-contrast placeholder frame with FFmpeg
           execSync(`ffmpeg -y -f lavfi -i color=c=0x111827:s=1280x720:d=1 -vframes 1 "${framePath}"`);
         }

@@ -1,6 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, GithubAuthProvider, OAuthProvider } from 'firebase/auth';
-import { initializeFirestore, getFirestore, doc, getDocFromServer, disableNetwork, setLogLevel } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, disableNetwork, setLogLevel } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Silence internal Firestore SDK backoff logging
@@ -11,18 +11,10 @@ try {
 // Initialize Firebase App singleton
 export const firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
-/* Initialize Firestore with auto-detect long polling to ensure reliable connection across all webview & mobile network environments */
-let firestoreInstance;
-try {
-  firestoreInstance = initializeFirestore(firebaseApp, {
-    experimentalForceLongPolling: true,
-  }, firebaseConfig.firestoreDatabaseId);
-} catch {
-  firestoreInstance = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-}
-
-export const db = firestoreInstance;
+/* Initialize Firestore according to standard Firebase specification */
+export const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(firebaseApp);
+
 export const googleAuthProvider = new GoogleAuthProvider();
 googleAuthProvider.setCustomParameters({ prompt: 'select_account' });
 

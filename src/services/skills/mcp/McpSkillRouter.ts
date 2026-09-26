@@ -2,10 +2,16 @@ import { mcpSkillRegistry } from './NavixSkillRegistry';
 import { McpSkillExecutor } from './McpSkillExecutor';
 import { McpSkillAdapter } from './McpSkillAdapter';
 
+const getBaseApiUrl = (): string => {
+  if (typeof window !== 'undefined') return '';
+  return (typeof process !== 'undefined' && process.env?.NAVIX_INTERNAL_BASE_URL) || 'http://127.0.0.1:3000';
+};
+
 export class NavixSkillRouter {
   static async discoverSkills(serverName: string): Promise<boolean> {
     try {
-      const res = await fetch(`/api/mcp/discover`, {
+      const baseUrl = getBaseApiUrl();
+      const res = await fetch(`${baseUrl}/api/mcp/discover`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serverName })

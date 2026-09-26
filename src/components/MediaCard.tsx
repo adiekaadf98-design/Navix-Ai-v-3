@@ -629,8 +629,7 @@ export function MediaCard({ media }: { media: MediaData }) {
     setProgress(15);
     setCurrentModule('Mengaktifkan Optik Ultra-Realistis Tanpa Filter...');
     
-    // Add raw real photo conditioning to force candid camera capture without porcelain/doll bias
-    const rawRealisticPrompt = `${cleanBuzzwords(media.prompt || 'Indonesian person')}, raw candid smartphone camera photo, real authentic human skin texture with pores and natural skin tone, unposed everyday moment, strictly no plastic skin, no doll face, no anime, no 3d render, no airbrushing, no beauty filter`;
+    const rawRealisticPrompt = translateAndEnrichPrompt(media.prompt || 'Subject').prompt;
     
     try {
       let resultUrl = '';
@@ -666,7 +665,7 @@ export function MediaCard({ media }: { media: MediaData }) {
     setCurrentModule('Merender Variasi Sudut & Pencahayaan Baru...');
     
     try {
-      const seedVariationPrompt = `${cleanBuzzwords(media.prompt || 'Indonesian person')}, alternative camera angle, natural authentic daylight`;
+      const seedVariationPrompt = `${cleanBuzzwords(media.prompt || 'Subject')}, alternative camera angle, natural ambient lighting`;
       let resultUrl = '';
       try {
         resultUrl = await generateServerImage(seedVariationPrompt, media.image, media.aspectRatio);
@@ -696,33 +695,7 @@ export function MediaCard({ media }: { media: MediaData }) {
 
 
   const enrichPromptForQuality = (rawPrompt: string): string => {
-    // 1. Clean up common clunky AI buzzwords that ruin realism
-    let clean = rawPrompt.replace(/\b(realistic|photorealistic|hyperrealistic|unreal engine|octane render|8k|8k resolution|ultra realistic|hyper detailed|perfect skin|flawless skin|super detailed)\b/gi, '').trim();
-    
-    const p = clean.toLowerCase();
-    
-    // 1. Logo / Vector design
-    if (p.includes('logo') || p.includes('desain logo') || p.includes('brand') || p.includes('vector logo') || p.includes('lambang')) {
-      return `${clean}, professional corporate vector logo, clean white background, minimalist flat design, elegant modern graphic, vector line art, sharp details, master logo design, no blur, high quality`;
-    }
-    
-    // 1b. Banner / Spanduk / Poster
-    if (p.includes('banner') || p.includes('spanduk') || p.includes('poster')) {
-      return `${clean}, professional high-quality banner design, modern typography, striking visual composition, vibrant colors, marketing material, 8k resolution, graphic design masterpiece, professional layout`;
-    }
-    
-    // 2. Cartoon / Animation / Anime
-    if (p.includes('kartun') || p.includes('cartoon') || p.includes('animasi') || p.includes('anime') || p.includes('gambar kartun') || p.includes('ilustrasi')) {
-      return `${clean}, beautiful cute 3D Disney Pixar animation style, vibrant rich colors, cinematic lighting, cheerful mood, extremely detailed facial expressions, master class illustration, clean lines, high definition`;
-    }
-    
-    // 3. Human / Portraits / Realistic faces
-    if (p.includes('wajah') || p.includes('manusia') || p.includes('orang') || p.includes('wanita') || p.includes('pria') || p.includes('gadis') || p.includes('cowok') || p.includes('cewek') || p.includes('human') || p.includes('face') || p.includes('portrait') || p.includes('person') || p.includes('woman') || p.includes('man') || p.includes('girl') || p.includes('gadis berkerudung') || p.includes('hijab') || p.includes('wajahnya')) {
-      return `${clean}, masterpiece, ultra hyper-realistic candid photography, shot on professional DSLR camera, 85mm lens, f/1.4 aperture, perfect exact human anatomy, perfectly symmetrical face, extremely detailed real skin texture, visible skin pores, slight film grain, cinematic studio lighting, stray hair strands, natural skin imperfections, soft shadows, dramatic backlight, realistic catchlight in eyes, sharp focus on eyes. raw photo quality, 8k resolution. avoiding cgi, 3d render, plastic skin, airbrushed, cartoon, anime, illustration, flawless skin, deformed, glossy, smooth skin, bad anatomy, bad eyes, disfigured, glitched. It must look 100% like a real photo of a real living creature`;
-    }
-    
-    // 4. Default high-end realistic / cinematic scene
-    return `${clean}, authentic real-world photograph, real life, candid photography, shot on professional DSLR camera, 35mm lens, f/1.8 aperture, natural textures, slight film grain, cinematic lighting, sharp focus, vibrant realistic color grading, highly detailed environment, 8k resolution, photorealistic. avoiding cgi, 3d render, plastic skin, airbrushed, cartoon, anime, illustration, flawless skin, deformed, glossy, smooth skin, bad anatomy, bad eyes, disfigured, glitched`;
+    return translateAndEnrichPrompt(rawPrompt).prompt;
   };
 
   const getVideoModelForPrompt = (promptStr: string, hasImage?: boolean): string => {

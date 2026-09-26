@@ -53,7 +53,7 @@ export class MemoryRanker {
           score: Math.round(finalScore * 10) / 10
         };
       })
-      .filter(item => item.score >= 50)
+      .filter(item => item.score >= 30)
       .sort((a, b) => b.score - a.score);
   }
 }

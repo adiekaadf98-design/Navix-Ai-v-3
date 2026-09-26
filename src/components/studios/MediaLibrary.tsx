@@ -43,7 +43,20 @@ export const MediaLibrary: React.FC<MediaLibraryProps> = ({ onOpenSidebar, onSen
   const [mediaList, setMediaList] = useState<MediaItem[]>(() => {
     try {
       const saved = localStorage.getItem('navix_media_vault');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item: any) => ({
+            id: item.id || `m-${Math.random()}`,
+            name: item.name || item.title || 'Navix_Media_Asset',
+            type: item.type || 'image',
+            url: item.url || '#',
+            size: item.size || (item.sizeBytes ? `${(item.sizeBytes / (1024 * 1024)).toFixed(1)} MB` : '1.4 MB'),
+            source: item.source || 'ai-generated',
+            date: item.date || (item.createdAt ? new Date(item.createdAt).toLocaleDateString('id-ID') : 'Hari ini')
+          }));
+        }
+      }
     } catch (e) {
       console.warn('Failed to load navix_media_vault', e);
     }

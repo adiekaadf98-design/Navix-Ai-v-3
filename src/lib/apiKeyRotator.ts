@@ -177,5 +177,23 @@ export async function rotateFetch(url: string, options: RequestInit = {}): Promi
   headers.delete('x-custom-api-key');
   const token = typeof localStorage !== 'undefined' ? (localStorage.getItem('navix_auth_token') || localStorage.getItem('navix_token')) : null;
   if (token) headers.set('Authorization', `Bearer ${token}`);
-  return fetch(url, { ...options, headers, signal: options.signal || AbortSignal.timeout(90000) });
+
+  let lastError: any = null;
+  const maxRetries = 2;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, { ...options, headers, signal: options.signal || AbortSignal.timeout(90000) });
+      return response;
+    } catch (fetchErr: any) {
+      lastError = fetchErr;
+      console.warn(`[rotateFetch] Attempt ${attempt + 1}/${maxRetries + 1} failed:`, fetchErr?.message || fetchErr);
+      if (attempt < maxRetries) {
+        // Short pause before retrying network request
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      }
+    }
+  }
+
+  throw lastError || new Error("Gagal melakukan koneksi jaringan ke server.");
 }

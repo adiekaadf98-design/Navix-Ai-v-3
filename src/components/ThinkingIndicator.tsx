@@ -1,19 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Server, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ChevronDown, 
   ChevronRight, 
-  Check, 
-  Brain, 
-  Sparkles, 
-  Cpu, 
-  Clock, 
-  Layers, 
-  CheckCircle2,
-  Loader2,
-  Activity,
-  Zap
+  Check
 } from 'lucide-react';
 import { EffortLevel, TaskPlan, ToolBudget } from '../services/ThinkingEngine';
 
@@ -108,6 +98,8 @@ export function ThinkingIndicator({
     'TESTING': 'Validasi Retensi Logika',
     'PROMOTING': 'Integrasi Pengetahuan Final',
     'thinking_started': 'Memulai Alur Penalaran Kognitif',
+    'collaborative_understanding': 'Kolaborasi Tim Multi-Model: Dekonstruksi & Pemeriksaan Silang',
+    'collaborative_verification': 'Verifikasi Multi-Model & Konsensus Tim AI',
     'agent_state': 'Menganalisis Intent & Rencana',
     'engine_started': 'Mengalokasikan ke Mesin Komputasi',
     'engine_progress': 'Eksekusi Algoritma Mesin',
@@ -240,158 +232,102 @@ export function ThinkingIndicator({
   const completedCount = isThinking ? mappedCompletedSteps.length : stepsList.length;
 
   return (
-    <div className="w-full max-w-2xl my-2 select-none text-left">
-      {/* Wadah Utama Indikator Thinking */}
-      <div className="bg-[#121214] border border-neutral-800/80 hover:border-neutral-700/80 rounded-2xl overflow-hidden transition-all duration-200 shadow-lg shadow-black/40">
-        
-        {/* Header Bar yang dapat diklik */}
-        <button
-          type="button"
-          onClick={() => setIsExpanded(prev => !prev)}
-          className="w-full px-3.5 py-2.5 flex items-center justify-between gap-2.5 text-left cursor-pointer hover:bg-neutral-800/30 active:bg-neutral-800/50 transition-colors group"
-          aria-expanded={isExpanded}
-        >
-          {/* Sisi Kiri: Ikon Otak + Status Berpikir + Timer */}
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-              isThinking 
-                ? 'bg-red-500/15 text-purple-400 border border-purple-500/30' 
-                : 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/30'
-            }`}>
+    <div className="w-full max-w-full my-1.5 select-none text-left font-sans">
+      {/* Bar Status Text-Based Minimalis */}
+      <div className="flex flex-col gap-1.5 py-1">
+        {/* Baris Utama Indikator */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            {/* Indikator Status Pulsing / Checkmark */}
+            <div className="flex items-center gap-1.5 shrink-0">
               {isThinking ? (
-                <Brain className="w-3.5 h-3.5 animate-pulse text-purple-400" />
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                </span>
               ) : (
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 stroke-[2.5]" />
               )}
-            </div>
 
-            <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-medium text-neutral-200 tracking-tight flex items-center gap-1.5">
-                  {isThinking ? (
-                    <>
-                      <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent font-bold tracking-wide flex items-center gap-2">
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
-                          </span>
-                          Mesin Kognitif Aktif...
-                        </span>
-                      <span className="text-neutral-400 text-[11px] font-mono">({displaySeconds}s)</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-neutral-200 font-semibold">Proses Berpikir Selesai</span>
-                      <span className="text-neutral-400 text-[11px] font-mono">({displaySeconds}s)</span>
-                    </>
-                  )}
-                </span>
-
-                {/* Badge Tipe Tugas */}
-                <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-neutral-800/90 text-neutral-300 border border-neutral-700/60 font-medium">
-                  {taskTypeLabels[taskType] || taskType}
-                </span>
-
-                {/* Badge Tingkat Penalaran */}
-                <span className="text-[9.5px] px-2 py-0.5 rounded-full bg-neutral-900 text-neutral-400 border border-neutral-800 font-mono hidden sm:inline-block">
-                  {effortLabels[effort] || effort}
-                </span>
-              </div>
-
-              {/* Teks status langkah saat ini (saat aktif) */}
-              {isThinking && (
-                <p className="text-[11px] text-neutral-400 truncate mt-0.5 flex items-center gap-1.5">
-                  <Loader2 className="w-3 h-3 text-purple-400 animate-spin shrink-0" />
-                  <span className="truncate">
-                    {mappedCurrentStep || 'Menganalisis instruksi secara mendalam...'}
-                  </span>
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Sisi Kanan: Status Selesai / Chevron Toggle */}
-          <div className="flex items-center gap-2 shrink-0 ml-2">
-            {!isThinking && (
-              <span className="text-[10px] text-emerald-400/90 font-mono hidden sm:inline-flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                {completedCount}/{stepsList.length} langkah
+              <span className={`text-xs font-medium tracking-tight ${
+                isThinking 
+                  ? 'text-neutral-200' 
+                  : 'text-neutral-400'
+              }`}>
+                {isThinking ? 'Mesin Kognitif Aktif' : 'Proses Berpikir Selesai'}
               </span>
-            )}
-            
-            <div className="p-1 rounded-md text-neutral-400 group-hover:text-neutral-200 transition-colors">
-              {isExpanded ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-            </div>
-          </div>
-        </button>
 
-        {/* Konten Rincian Langkah Penalaran (Accordion) */}
+              <span className="text-[11px] font-mono text-neutral-500">
+                ({displaySeconds}s)
+              </span>
+            </div>
+
+            {/* Separator Titik & Metadata Teks */}
+            <span className="text-neutral-700 text-xs hidden sm:inline">·</span>
+
+            <span className="text-[11px] text-neutral-400">
+              {taskTypeLabels[taskType] || taskType}
+            </span>
+
+            <span className="text-neutral-700 text-xs hidden sm:inline">·</span>
+
+            <span className="text-[11px] text-neutral-500 hidden sm:inline">
+              {effortLabels[effort] || effort}
+            </span>
+
+            {!isThinking && (
+              <>
+                <span className="text-neutral-700 text-xs hidden md:inline">·</span>
+                <span className="text-[11px] text-neutral-500 hidden md:inline">
+                  {completedCount}/{stepsList.length} tahap
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* Tombol Toggle Detail Ramping Text-Based */}
+          <button
+            type="button"
+            onClick={() => setIsExpanded(prev => !prev)}
+            className="flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-300 active:text-neutral-200 transition-colors py-0.5 px-1 rounded cursor-pointer"
+            aria-expanded={isExpanded}
+            title={isExpanded ? 'Sembunyikan alur penalaran' : 'Tampilkan alur penalaran'}
+          >
+            <span>{isExpanded ? 'Tutup alur' : 'Detail alur'}</span>
+            {isExpanded ? (
+              <ChevronDown className="w-3.5 h-3.5" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5" />
+            )}
+          </button>
+        </div>
+
+        {/* Status Langkah Ringkas (Hanya saat alur ditutup) */}
+        {isThinking && !isExpanded && (
+          <div className="flex items-center gap-2 text-[11px] text-purple-400/90 pl-1 break-words">
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-purple-400"></span>
+            </span>
+            <span className="animate-pulse tracking-normal break-words">
+              {mappedCurrentStep || 'Menganalisis instruksi secara mendalam...'}
+            </span>
+          </div>
+        )}
+
+        {/* Konten Rincian Alur Kerja (Progressive Step-by-Step, Tanpa Garis Kiri) */}
         <AnimatePresence initial={false}>
           {isExpanded && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="overflow-hidden border-t border-neutral-800/60 bg-neutral-950/40 px-3.5 py-3"
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="overflow-hidden pt-1.5"
             >
-              <div className="space-y-2.5">
-                {/* Embedded Workflow Health HUD */}
-                <div className="mb-4 p-2.5 rounded-lg bg-neutral-900/50 border border-neutral-800/60 flex items-center justify-between gap-4">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9.5px] font-mono text-neutral-500 uppercase">Engine Status</span>
-                    <div className="flex items-center gap-1.5">
-                      {workflow.state === 'PROCESSING' ? (
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
-                        </span>
-                      ) : (
-                        <div className="w-2 h-2 rounded-full bg-emerald-500/50" />
-                      )}
-                      <span className={`text-[10px] font-medium ${workflow.state === 'PROCESSING' ? 'text-purple-400' : 'text-emerald-400'}`}>
-                        {workflow.state}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className="text-[9.5px] font-mono text-neutral-500 uppercase flex items-center gap-1"><Server size={10} /> Queue</span>
-                      <span className="text-[10px] text-neutral-300 font-mono">{workflow.queueLength} tasks</span>
-                    </div>
-                    
-                    <div className="w-px h-6 bg-neutral-800" />
-                    
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className="text-[9.5px] font-mono text-neutral-500 uppercase flex items-center gap-1"><Clock size={10} /> Latency</span>
-                      <span className="text-[10px] text-neutral-300 font-mono">{latency} ms</span>
-                    </div>
-                    
-                    <div className="w-px h-6 bg-neutral-800" />
-                    
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className="text-[9.5px] font-mono text-neutral-500 uppercase flex items-center gap-1"><AlertTriangle size={10} /> Err Rate</span>
-                      <span className={`text-[10px] font-mono ${parseFloat(errorRate as string) > 5 ? 'text-red-400' : 'text-emerald-400'}`}>{errorRate}%</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[10.5px] font-mono text-neutral-400 uppercase tracking-wider mb-2">
-                  <span className="flex items-center gap-1.5 text-neutral-400">
-                    <Activity className="w-3 h-3 text-purple-400" />
-                    Alur Penalaran Navix AI
-                  </span>
-                  <span className="text-neutral-500">
-                    {isThinking ? 'Eksekusi Berjalan' : '100% Terverifikasi'}
-                  </span>
-                </div>
-
-                <div className="relative pl-1">
+              <div className="py-1 space-y-2">
+                {/* Daftar Alur Langkah Teks Muncul Sekuensial Satu Per Satu */}
+                <div className="space-y-2">
                   {(() => {
                     const totalSteps = stepsList.length;
                     let activeIndex = 0;
@@ -409,77 +345,59 @@ export function ThinkingIndicator({
                       if (eventIdx !== -1) {
                         activeIndex = eventIdx;
                       } else {
-                        const timeBasedIndex = Math.min(Math.floor(liveSeconds / 2.2), totalSteps - 1);
+                        // Langkah bergeser bertahap setiap ~2 detik per proses
+                        const timeBasedIndex = Math.min(Math.floor(liveSeconds / 2.0), totalSteps - 1);
                         const completedBasedIndex = Math.min(completedSteps.length, totalSteps - 1);
                         activeIndex = Math.max(completedBasedIndex, timeBasedIndex);
                       }
                     }
 
-                    return stepsList.map((step, idx) => {
+                    // HANYA tampilkan langkah yang sudah berjalan atau sedang aktif (muncul bertahap)
+                    const visibleSteps = isThinking 
+                      ? stepsList.slice(0, activeIndex + 1)
+                      : stepsList;
+
+                    return visibleSteps.map((step, idx) => {
                       const isCompleted = !isThinking || idx < activeIndex;
                       const isActive = isThinking && idx === activeIndex;
 
                       return (
-                        <div key={idx} className="relative flex items-start group min-h-[26px]">
-                          {/* Garis Vertikal Penghubung Timeline */}
-                          {idx < stepsList.length - 1 && (
-                            <div className={`absolute left-[9px] top-[18px] bottom-[-6px] w-[1.5px] transition-colors duration-300 ${
-                              isCompleted 
-                                ? 'bg-emerald-500/40' 
-                                : isActive 
-                                ? 'bg-purple-500/50 shadow-[0_0_5px_rgba(168,85,247,0.5)]' 
-                                : 'bg-neutral-800'
-                            }`} />
-                          )}
-
-                          {/* Node Indikator Tahap (Premium) */}
-                          <div className="relative shrink-0 z-10 mt-0.5">
-                             {isActive && (
-                               <div className="absolute inset-0 rounded-full bg-purple-500/30 blur-[6px] animate-pulse" />
-                             )}
-                             <div className={`relative w-5 h-5 rounded-full flex items-center justify-center transition-all duration-500 ${
-                               isCompleted
-                                 ? 'bg-gradient-to-br from-emerald-500/20 to-emerald-900/40 border border-emerald-500/50 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-                                 : isActive
-                                 ? 'bg-gradient-to-br from-purple-500/20 to-indigo-900/40 border border-purple-500/70 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.4)] scale-125'
-                                 : 'bg-neutral-900/80 border border-neutral-800/80 text-neutral-600'
-                             }`}>
-                               {isCompleted ? (
-                                 <Check className="w-3 h-3 stroke-[2.5]" />
-                               ) : isActive ? (
-                                 <Loader2 className="w-3 h-3 animate-spin text-purple-400" />
-                               ) : (
-                                 <div className="w-1.5 h-1.5 rounded-full bg-neutral-700/80" />
-                               )}
-                             </div>
-                          </div>
-
-                          {/* Deskripsi Langkah */}
-                          <div className="ml-3 flex-1 pb-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className={`text-[11.5px] leading-snug transition-colors ${
-                                isActive 
-                                  ? 'text-white font-medium' 
-                                  : isCompleted 
-                                  ? 'text-neutral-300' 
-                                  : 'text-neutral-500'
-                              }`}>
-                                {step}
+                        <motion.div 
+                          key={idx} 
+                          initial={{ opacity: 0, y: 4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ duration: 0.25, ease: "easeOut" }}
+                          className="flex items-start gap-2.5 text-[12px] leading-relaxed break-words"
+                        >
+                          {/* Ikon: Centang untuk yang selesai, Titik Denyut Halus untuk yang aktif */}
+                          <div className="mt-0.5 shrink-0 flex items-center justify-center w-4 h-4">
+                            {isCompleted ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5] animate-in zoom-in-75 duration-150" />
+                            ) : (
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-400"></span>
                               </span>
-                              
-                              {isActive && (
-                                <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-purple-900/30 text-purple-300 border border-purple-700/50 shadow-[0_0_8px_rgba(168,85,247,0.2)] font-mono shrink-0 animate-pulse">
-                                  Memproses...
-                                </span>
-                              )}
-                              {isCompleted && (
-                                <span className="text-[9.5px] text-emerald-500/80 font-mono shrink-0">
-                                  Selesai
-                                </span>
-                              )}
-                            </div>
+                            )}
                           </div>
-                        </div>
+
+                          {/* Teks Langkah */}
+                          <div className="flex-1 min-w-0 flex items-baseline justify-between gap-2 flex-wrap">
+                            <span className={`${
+                              isActive 
+                                ? 'text-neutral-100 font-medium' 
+                                : 'text-neutral-400'
+                            } break-words transition-colors duration-200`}>
+                              {step}
+                            </span>
+
+                            {isActive && (
+                              <span className="text-[10px] text-purple-400/90 font-mono shrink-0 animate-pulse">
+                                sedang memproses...
+                              </span>
+                            )}
+                          </div>
+                        </motion.div>
                       );
                     });
                   })()}

@@ -136,6 +136,11 @@ class ServerKeyRotatorManager {
       }
     }
 
+    const envKey = (process.env.GEMINI_API_KEY || '').trim();
+    if (envKey) {
+      candidateKeys.unshift(envKey);
+    }
+
     // Now populate candidate keys prioritizing custom keys, then fallback to env keys
     if (customKeys.length > 0) {
        for (const ck of customKeys) {
@@ -150,6 +155,13 @@ class ServerKeyRotatorManager {
        if (item.status === 'active' && !candidateKeys.includes(item.key)) {
           candidateKeys.push(item.key);
        }
+    }
+
+    // Ensure envKey is at index 0 if valid
+    if (envKey) {
+      const filtered = candidateKeys.filter(k => k !== envKey);
+      candidateKeys.length = 0;
+      candidateKeys.push(envKey, ...filtered);
     }
 
     // If candidateKeys empty (all requested/available keys exhausted), auto-reset all exhausted server keys!

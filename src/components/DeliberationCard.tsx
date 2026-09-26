@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, ShieldCheck, CheckCircle2, ChevronDown, ChevronUp, Sparkles, Brain, Cpu, MessageSquareQuote } from 'lucide-react';
+import { Users, ShieldCheck, CheckCircle2, ChevronDown, ChevronUp, Sparkles, Brain, Cpu, MessageSquareQuote, Layers, GitBranch, Award } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DeliberationVerdict, DeliberationDialogue } from '../services/council/DeliberationCouncilEngine';
 
@@ -96,6 +96,60 @@ export const DeliberationCard: React.FC<DeliberationCardProps> = ({ verdict }) =
             <span className="text-emerald-400">{verdict.factCheckAudit.factualConfidence}% Tervalidasi</span>
           </div>
         </div>
+
+        {/* Pilgun (Engine Candidate Arbitrator) Section */}
+        {verdict.recommendedEngine.pilgunDetail && verdict.recommendedEngine.pilgunDetail.evaluations && (
+          <div className="mt-3 pt-3 border-t border-neutral-800/40">
+            <div className="flex items-center justify-between text-[11px] font-mono text-neutral-400 mb-2">
+              <span className="flex items-center gap-1.5 text-neutral-300 font-semibold">
+                <Award size={13} className="text-yellow-400" />
+                Arbitrase Pilgun ({verdict.recommendedEngine.pilgunDetail.evaluations.length} Kandidat Mesin):
+              </span>
+              <span className="text-[10px] text-neutral-500">
+                Terpilih: <span className="text-amber-300 font-bold">{verdict.recommendedEngine.pilgunDetail.selectedEngine}</span>
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[10px] font-mono">
+              {verdict.recommendedEngine.pilgunDetail.evaluations.map((cand: any, cIdx: number) => {
+                const isSelected = cand.engineName === verdict.recommendedEngine.pilgunDetail?.selectedEngine;
+                return (
+                  <div
+                    key={cIdx}
+                    className={`p-2 rounded-md border flex items-center justify-between gap-2 transition-all ${
+                      isSelected
+                        ? 'bg-amber-950/20 border-amber-600/50 text-amber-200 shadow-sm'
+                        : 'bg-neutral-900/40 border-neutral-800/60 text-neutral-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {isSelected ? (
+                        <CheckCircle2 size={12} className="text-amber-400 shrink-0" />
+                      ) : (
+                        <span className="w-3 h-3 rounded-full border border-neutral-700 shrink-0 inline-block" />
+                      )}
+                      <span className="font-semibold truncate">{cand.engineName}</span>
+                      <span className={`px-1.5 py-0.2 rounded text-[9px] ${
+                        cand.type === 'OPEN_SOURCE_GITHUB' 
+                          ? 'bg-sky-950/40 text-sky-400 border border-sky-800/50' 
+                          : 'bg-neutral-800 text-neutral-300'
+                      }`}>
+                        {cand.type === 'OPEN_SOURCE_GITHUB' ? 'GitHub OS' : 'Core'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-neutral-500">{cand.totalScore} pts</span>
+                      <span className={`px-1 py-0.2 rounded text-[8px] ${
+                        cand.health === 'AVAILABLE' ? 'text-emerald-400' : 'text-rose-400'
+                      }`}>
+                        {cand.health}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Expandable Deliberation Dialogues */}

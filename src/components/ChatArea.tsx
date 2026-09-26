@@ -448,90 +448,108 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
        );
     }
 
-    // Broad symbol detection for text signals
-    let detectedSymbol = '';
-    if (role === 'ai') {
-      const textUpper = text.toUpperCase().replace('/', '');
-      
-      // Strict rule: Only extract and display market/trading widgets if the context is related to trading,
-      // has explicit chart/visualization intent, and is not a complaint or apology conversation.
-      const tradingKeywords = [
-        'BUY', 'SELL', 'ENTRY', 'SIGNAL', 'POSITION', 'ANALYSIS', 'CHART', 'TRADE', 'TRADING', 
-        'MARKET', 'FOREX', 'CRYPTO', 'PRICE', 'CANDLESTICK', 'RESISTANCE', 'SUPPORT', 'TREND', 
-        'SMC', 'ICT', 'TECHNICAL', 'FUNDAMENTAL', 'INDICATOR', 'OSCILLATOR', 'TIMEFRAME', 'GRAFIK',
-        'PAMP', 'DUMP', 'SL', 'TP', 'RISK', 'REWARD', 'OUTLOOK', 'FORECAST', 'PREDIKSI'
-      ];
-      const hasTradingContext = tradingKeywords.some(k => textUpper.includes(k));
-
-      const chartIntentKeywords = ['GRAFIK', 'CHART', 'TRADINGVIEW', 'WIDGET', 'VISUALISASI', 'PLOT'];
-      const hasChartIntent = chartIntentKeywords.some(k => textUpper.includes(k));
-
-      const complaintKeywords = ['KENAPA', 'MENGAPA', 'KOK', 'SALAH', 'ERROR', 'BUG', 'KOMPLAIN', 'MALAH', 'KELUAR', 'KONSEP', 'MASALAH', 'TIDAK SESUAI', 'BELUM SESUAI', 'MAAF', 'APOLOGI', 'SORRY'];
-      const isComplaintOrApology = complaintKeywords.some(k => textUpper.includes(k));
-
-      if (hasTradingContext && !isComplaintOrApology && !mediaData && !documentData && !scienceData && !trackerData) {
-        const symbols = ['XAUUSD', 'BTCUSD', 'ETHUSD', 'GBPUSD', 'EURUSD', 'SOLUSD', 'BNBUSD', 'XRPUSD', 'GOLD', 'SILVER', 'PAXG', 'PAX', 'GC=F', 'GC'];
-        for (const s of symbols) {
-          if (textUpper.includes(s)) {
-            // Force Gold mapping
-            if (s === 'PAXG' || s === 'PAX' || s === 'GOLD' || s === 'GC=F' || s === 'GC') {
-              detectedSymbol = 'XAUUSD';
-            } else {
-              detectedSymbol = s;
-            }
-            break;
-          }
-        }
-        // Special check for keywords indicating a signal
-        const signalKeywords = ['BUY', 'SELL', 'ENTRY', 'SIGNAL', 'POSITION', 'ANALYSIS', 'ANALISA'];
-        const hasSignalKeyword = signalKeywords.some(k => textUpper.includes(k));
-        if (!detectedSymbol && hasSignalKeyword && (textUpper.includes('GOLD') || textUpper.includes('PAX'))) {
-          detectedSymbol = 'XAUUSD';
-        }
+    // Determine the corresponding user prompt that triggered this AI message
+    let userPromptText = '';
+    if (role === 'ai' && msgId && messagesRef.current) {
+      const msgIndex = messagesRef.current.findIndex(m => m.id === msgId);
+      if (msgIndex >= 0) {
+        const prevUserMsg = [...messagesRef.current.slice(0, msgIndex)].reverse().find(m => m.role === 'user');
+        userPromptText = (prevUserMsg?.text || '').toLowerCase();
       }
     }
+
+    // Contextual Display Rules:
+    // Sesuai standar NAVIX AI: Seluruh laporan, chart, tabel, visualisasi, kartu, panel, atau komponen UI 
+    // hasil proses internal NAVIX AI yang muncul di bawah jawaban Chat Utama TIDAK ditampilkan secara otomatis.
+    // Untuk hasil proses biasa, tampilkan HANYA TEKS yang rapi, jelas, dan mudah dibaca langsung di Chat Utama.
+    // Komponen proses internal hanya ditampilkan apabila memang dibutuhkan atau diminta secara eksplisit oleh pengguna.
+
+    // 1. Deliberation / Sidang Dewan Multi-Agen Intent Check
+    const deliberationKeywords = [
+      'dewan', 'deliberasi', 'deliberation', 'sidang', 'pilgun', 
+      'evaluasi agen', 'audit dewan', 'transparansi dewan', 'council', 
+      'multi-agen', 'multi-agent', 'lihat sidang', 'buka sidang', 'tampilkan dewan',
+      'hasil deliberasi', 'sidang dewan'
+    ];
+    const isDeliberationRequested = Boolean(userPromptText && deliberationKeywords.some(k => userPromptText.includes(k)));
+
+    // 2. Trading Signal / Market Card Intent Check
+    const signalKeywords = [
+      'kartu sinyal', 'signal card', 'kartu signal', 'sinyal card', 
+      'widget sinyal', 'tradingview', 'chart', 'grafik', 'visualisasi sinyal', 
+      'kartu trading', 'setup sinyal', 'signal setup', 'entry sl tp', 
+      'tampilkan sinyal', 'minta sinyal', 'rekomendasi sinyal', 'kartu',
+      'sinyal buy', 'sinyal sell', 'sinyal trading'
+    ];
+    const isSignalRequested = Boolean(userPromptText && signalKeywords.some(k => userPromptText.includes(k)));
+
+    // 3. Shadow Engine Telemetry Card Intent Check
+    const shadowKeywords = ['shadow', 'telemetri', 'telemetry', 'debug card', 'metrik shadow', 'shadow engine'];
+    const isShadowRequested = Boolean(userPromptText && shadowKeywords.some(k => userPromptText.includes(k)));
+
+    // 4. Science / Math Simulation Widget Intent Check
+    const scienceKeywords = ['simulasi', 'kartu sains', 'widget sains', 'kalkulator sains', 'visualisasi rumus', 'kartu rumus', 'interaktif'];
+    const isScienceRequested = Boolean(userPromptText && scienceKeywords.some(k => userPromptText.includes(k)));
+
+    // 5. Tracker Board / Card Intent Check
+    const trackerKeywords = ['tracker', 'board', 'kanban', 'kartu proyek', 'kartu tugas', 'progress card', 'widget tracker'];
+    const isTrackerRequested = Boolean(userPromptText && trackerKeywords.some(k => userPromptText.includes(k)));
 
     return (
       <div className="flex flex-col gap-2 w-full max-w-full overflow-hidden">
         {renderedText}
+
+        {/* PENGECUALIAN RESMI — Tetap ditampilkan melalui UI yang sesuai dan responsif: */}
+
+        {/* Pengecualian 1: File PDF dan dokumen lainnya */}
         {documentData && (
           <div className="w-full mt-4">
             <DocumentCard document={documentData} />
           </div>
         )}
-        {deliberationData && (
-          <div className="w-full mt-4">
-            <DeliberationCard verdict={deliberationData} />
-          </div>
-        )}
+
+        {/* Pengecualian 2: Preview desain, hasil visual, file gambar, video, audio, dan permintaan multimedia */}
         {mediaData && (
           <div className="w-full mt-4">
             <MediaCard media={mediaData} />
           </div>
         )}
-        {shadowData && (
-          <div className="w-full mt-4">
-            <ShadowEngineCard data={shadowData} />
-          </div>
-        )}
-        {scienceData && (
-          <div className="w-full mt-4">
-            <ScienceCard data={scienceData} />
-          </div>
-        )}
+
+        {/* Pengecualian 3: Preview pembuatan website/aplikasi & hasil coding/project yang butuh preview/interaksi */}
         {studioAppData && (
           <div className="w-full mt-4">
             <StudioAppCard data={studioAppData} />
           </div>
         )}
-        {signalsData.length > 0 && (
+
+        {/* KOMPONEN PROSES INTERNAL — Hanya ditampilkan jika memang diminta / dibutuhkan oleh pengguna */}
+        {deliberationData && isDeliberationRequested && (
+          <div className="w-full mt-4">
+            <DeliberationCard verdict={deliberationData} />
+          </div>
+        )}
+
+        {signalsData.length > 0 && isSignalRequested && (
           <div className="flex flex-col gap-4 w-full mt-4">
             {signalsData.map((sig, idx) => (
               <SignalCard key={idx} signal={sig} />
             ))}
           </div>
         )}
-        {trackerData && (
+
+        {shadowData && isShadowRequested && (
+          <div className="w-full mt-4">
+            <ShadowEngineCard data={shadowData} />
+          </div>
+        )}
+
+        {scienceData && isScienceRequested && (
+          <div className="w-full mt-4">
+            <ScienceCard data={scienceData} />
+          </div>
+        )}
+
+        {trackerData && isTrackerRequested && (
           <div className="w-full mt-4">
             <TrackerCard data={trackerData} />
           </div>
@@ -1140,7 +1158,7 @@ Peran Anda: ORCHESTRATOR UTAMA YANG SANGAT CERDAS & AGRESIF.
 
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0a0a0a] relative min-w-0 w-full max-w-full overflow-hidden">
+    <div className="flex-1 flex flex-col h-full min-h-0 bg-[#0a0a0a] relative min-w-0 w-full max-w-full overflow-hidden">
       {toastMsg && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-4">
           <div className="bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 px-4 py-2 rounded-lg text-sm shadow-xl flex items-center gap-2 backdrop-blur-sm">
@@ -1256,11 +1274,11 @@ Peran Anda: ORCHESTRATOR UTAMA YANG SANGAT CERDAS & AGRESIF.
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden w-full relative">
-        <div className="flex-1 flex flex-col overflow-hidden h-full relative">
+      <div className="flex-1 flex overflow-hidden w-full relative min-h-0 h-full">
+        <div className="flex-1 flex flex-col overflow-hidden h-full relative min-h-0">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-red-900/10 via-[#0a0a0a]/0 to-[#0a0a0a]/0 pointer-events-none" />
           
-          <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden px-3 md:px-4 w-full pb-4 shadow-inner custom-scrollbar touch-pan-y overscroll-y-contain">
+          <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto overflow-x-hidden px-2.5 sm:px-4 w-full pb-8 sm:pb-12 shadow-inner custom-scrollbar touch-pan-y overscroll-y-contain min-h-0">
         {messages.length === 0 ? (
           <div className="h-full min-h-[60vh] flex flex-col items-center justify-center p-6 md:p-8 text-center max-w-2xl mx-auto">
             <h1 className="text-4xl md:text-5xl font-light text-neutral-300 tracking-tight mb-2">
@@ -1353,7 +1371,7 @@ Peran Anda: ORCHESTRATOR UTAMA YANG SANGAT CERDAS & AGRESIF.
                   )}
                   <div className={`flex flex-col ${msg.role === 'user' ? 'items-end max-w-[85%] md:max-w-[80%]' : 'items-start w-full min-w-0'} group`}>
                     {msg.role === 'ai' && (msg.thinkingState || (isLoading && idx === messages.length - 1 && thinkingState?.isThinking)) && (
-                      <div className="mb-2 w-full max-w-2xl">
+                      <div className="mb-1 w-full">
                         <ThinkingIndicator 
                           {...thinkingState}
                           {...(msg.thinkingState || {})}
@@ -1547,7 +1565,7 @@ Peran Anda: ORCHESTRATOR UTAMA YANG SANGAT CERDAS & AGRESIF.
                   </div>
                 );
               })()}
-              <div ref={bottomRef} className="h-20 w-full shrink-0" />
+              <div ref={bottomRef} className="h-28 sm:h-36 md:h-44 w-full shrink-0" />
             </div>
           </div>
         )}

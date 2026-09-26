@@ -21,15 +21,32 @@ export interface ValidationResult {
 }
 
 export function validateImagePayload(payload: string): ValidationResult {
-  if (!payload) {
+  if (!payload || typeof payload !== 'string' || payload.trim() === '') {
     return { isValid: false, error: "Data gambar kosong (empty image data)." };
   }
   
-  if (!payload.startsWith('data:')) {
-    return { isValid: false, error: "Mime type tidak ditemukan. Format payload harus dimulai dengan data:image/..." };
+  const trimmed = payload.trim();
+  
+  // Allow valid web URLs and local paths (e.g. Unsplash stock, local storage, API endpoints, blobs)
+  if (
+    trimmed.startsWith('http://') || 
+    trimmed.startsWith('https://') || 
+    trimmed.startsWith('blob:') || 
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('./')
+  ) {
+    return { 
+      isValid: true, 
+      mimeType: 'image/url', 
+      sizeBytes: trimmed.length 
+    };
   }
 
-  const matches = payload.match(/^data:([^;]+);base64,(.*)$/);
+  if (!trimmed.startsWith('data:')) {
+    return { isValid: false, error: "Format payload tidak dikenali. Harus berupa URL gambar yang valid atau Data URL (data:image/...)." };
+  }
+
+  const matches = trimmed.match(/^data:([^;]+);base64,(.*)$/s);
   if (!matches) {
     return { isValid: false, error: "Struktur data URL salah (malformed data URL). Harus menggunakan format data:image/png;base64,..." };
   }
@@ -37,10 +54,10 @@ export function validateImagePayload(payload: string): ValidationResult {
   const mimeType = matches[1];
   const base64Data = matches[2];
 
-  // Validate mime type
-  const validMimeTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/svg+xml', 'image/bmp'];
-  if (!validMimeTypes.includes(mimeType.toLowerCase())) {
-    return { isValid: false, error: `Mime type '${mimeType}' tidak didukung oleh Vertex AI. Gunakan PNG, JPEG, WEBP, atau GIF.` };
+  // Validate mime type (accept all standard image formats)
+  const validMimeTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/svg+xml', 'image/bmp', 'image/avif', 'image/tiff', 'image/x-icon'];
+  if (!validMimeTypes.includes(mimeType.toLowerCase()) && !mimeType.toLowerCase().startsWith('image/')) {
+    return { isValid: false, error: `Mime type '${mimeType}' tidak didukung. Gunakan format gambar standar seperti PNG, JPEG, WEBP, atau GIF.` };
   }
 
   // Validate base64 structure

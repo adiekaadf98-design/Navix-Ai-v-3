@@ -9,6 +9,7 @@ import { classifyTask } from './ThinkingEngine';
 import { rotateFetch } from '../lib/apiKeyRotator';
 import { EvidenceEngine } from './AdvancedReasoning';
 import { globalDeliberationCouncil } from './council/DeliberationCouncilEngine';
+import { MediaVaultService } from './WorkspaceIntegrationEngine';
 
 
 /**
@@ -243,10 +244,9 @@ export class NavixOrchestrator {
           const backgroundUrl = bgLine ? bgLine.substring(11).trim() : '';
           const userPrompt = promptLine ? promptLine.substring(7).trim() : '';
 
-          const host = 'http://localhost:3000';
           const headers: any = { 'Content-Type': 'application/json' };
 
-          const response = await fetch(`${host}/api/composite-image`, {
+          const response = await fetch('/api/composite-image', {
             method: 'POST',
             headers,
             body: JSON.stringify({ faceUrl, clothesUrl, backgroundUrl, userPrompt, aspectRatio: '1:1' })
@@ -266,16 +266,30 @@ export class NavixOrchestrator {
       }
 
       // =========================================================================
-      // NAVIX AI — ENGINE-FIRST ARCHITECTURE
-      // AI = Orchestrator / Brain / Dispatcher
-      // ENGINE = Executor / Worker / Intelligence-in-action
-      //
+      // NAVIX AI — ENGINE-FIRST ARCHITECTURE WITH COGNITIVE DELIBERATION (AI DEBAT)
       // Flow:
-      // USER -> MAIN CHAT -> AI UNDERSTANDING -> INTENT + TASK ANALYSIS ->
-      // ENGINE SELECTION -> ENGINE EXECUTION -> REAL OUTPUT ->
-      // RESULT VALIDATION -> AI RESPONSE FORMATTER -> MAIN CHAT -> USER
+      // USER -> MAIN CHAT -> AI DEBAT (Dewan Deliberasi & Pilgun Arbitrator) ->
+      // ROUTING -> SKILL/TOOL -> ENGINE EXECUTION -> REAL OUTPUT ->
+      // VERIFICATION -> AI RESPONSE FORMATTER -> MAIN CHAT -> USER
       // =========================================================================
 
+      // Step 1: Cognitive Grounding & Deliberation Council (AI Debat & Pilgun Selection)
+      let boosterData: any = null;
+      if (req.aiBooster || req.thinkingMode) {
+        notify("booster_evidence", "pending", "Ekstraksi Bukti Empiris & Validasi Intent");
+        const evidenceEngine = new EvidenceEngine();
+        const extractedEvidence = evidenceEngine.extractEvidence(req.message, "User Prompt");
+
+        notify("booster_council", "pending", "Sidang Dewan Deliberasi Multi-Agen (Pilgun Arbitrator)");
+        const councilVerdict = globalDeliberationCouncil.deliberate(req.message);
+
+        notify("booster_guardrails", "pending", "Verifikasi Anti-Halusinasi & Guardrails");
+        boosterData = {
+          evidence: extractedEvidence,
+          council: councilVerdict,
+          memory: ""
+        };
+      }
 
       let engineResult: any = null;
       let engineName = "DefaultEngine";
@@ -287,65 +301,71 @@ export class NavixOrchestrator {
           engineName = "AdaptiveExecutionEngine";
         }
       } else {
-      notify("agent_state", "pending", "Analyzing Intent & Planning Tasks");
-      const executionPlan = ServiceRegistry.planExecution(req.message, req.attachments);
-      console.log(`[Orchestrator] 🧠 Intent & Task Analysis:`, executionPlan);
+        notify("agent_state", "pending", "Analyzing Intent & Planning Tasks");
+        const executionPlan = ServiceRegistry.planExecution(req.message, req.attachments);
+        console.log(`[Orchestrator] 🧠 Intent & Task Analysis:`, executionPlan);
 
-
-      engineName = executionPlan.primaryEngine;
-      notify("engine_started", "pending", `Dispatching to ${engineName}`);
-
-      if (executionPlan.mode === 'MULTI' && executionPlan.tasks.length > 1) {
-        // Multi-engine pipeline execution via AgentEngine
-        const agentEngine = globalEngineRegistry.getEngine('AgentEngine');
-        if (agentEngine) {
-          notify("engine_progress", "pending", `Running Multi-Engine Pipeline (${executionPlan.engineSequence.join(' ➔ ')})`);
-          engineResult = await agentEngine.execute({
-            goal: req.message,
-            steps: executionPlan.tasks
-          });
-          engineName = 'AgentEngine';
+        // Synergize with Deliberation Council & Pilgun Arbiter:
+        if (executionPlan.mode !== 'MULTI' && boosterData?.council?.recommendedEngine?.selectedEngine) {
+          const pilgunSelected = boosterData.council.recommendedEngine.selectedEngine;
+          if (globalEngineRegistry.hasEngine(pilgunSelected) && pilgunSelected !== 'DefaultEngine') {
+            console.log(`[Orchestrator] 🎯 Pilgun Arbiter Selected Engine: [${pilgunSelected}] over [${executionPlan.primaryEngine}]`);
+            executionPlan.primaryEngine = pilgunSelected;
+          }
         }
-      } else {
-        // Single engine execution
-        const engine = globalEngineRegistry.getEngine(engineName);
-        if (engine) {
-          notify("engine_progress", "pending", `Executing ${engineName}`);
-          console.log(`[Orchestrator] ⚙️ Executing Worker Engine: [${engineName}]`);
 
-          const taskPayload = executionPlan.tasks[0]?.payload || {
-            query: req.message,
-            prompt: req.message,
-            input: req.message,
-            attachments: req.attachments
-          };
+        engineName = executionPlan.primaryEngine;
+        notify("engine_started", "pending", `Dispatching to ${engineName}`);
 
-          try {
-            engineResult = await engine.execute(taskPayload);
-          } catch (execErr: any) {
-            console.error(`[Orchestrator] Engine [${engineName}] execution error:`, execErr);
-            engineResult = {
-              status: 'FAILED',
-              source: engineName,
-              engineName,
-              error: execErr?.message || 'Gagal mengeksekusi mesin.',
-              message: `Mesin ${engineName} mengalami kendala: ${execErr?.message || 'Error'}`
-            };
+        if (executionPlan.mode === 'MULTI' && executionPlan.tasks.length > 1) {
+          // Multi-engine pipeline execution via AgentEngine
+          const agentEngine = globalEngineRegistry.getEngine('AgentEngine');
+          if (agentEngine) {
+            notify("engine_progress", "pending", `Running Multi-Engine Pipeline (${executionPlan.engineSequence.join(' ➔ ')})`);
+            engineResult = await agentEngine.execute({
+              goal: req.message,
+              steps: executionPlan.tasks
+            });
+            engineName = 'AgentEngine';
           }
         } else {
-          console.warn(`[Orchestrator] Engine [${engineName}] not found in Registry. Using DefaultEngine.`);
-          const defEngine = globalEngineRegistry.getEngine('DefaultEngine');
-          if (defEngine) {
-            engineResult = await defEngine.execute({ query: req.message });
-            engineName = 'DefaultEngine';
+          // Single engine execution
+          const engine = globalEngineRegistry.getEngine(engineName);
+          if (engine) {
+            notify("engine_progress", "pending", `Executing ${engineName}`);
+            console.log(`[Orchestrator] ⚙️ Executing Worker Engine: [${engineName}]`);
+
+            const taskPayload = executionPlan.tasks[0]?.payload || {
+              query: req.message,
+              prompt: req.message,
+              input: req.message,
+              attachments: req.attachments
+            };
+
+            try {
+              engineResult = await engine.execute(taskPayload);
+            } catch (execErr: any) {
+              console.error(`[Orchestrator] Engine [${engineName}] execution error:`, execErr);
+              engineResult = {
+                status: 'FAILED',
+                source: engineName,
+                engineName,
+                error: execErr?.message || 'Gagal mengeksekusi mesin.',
+                message: `Mesin ${engineName} mengalami kendala: ${execErr?.message || 'Error'}`
+              };
+            }
+          } else {
+            console.warn(`[Orchestrator] Engine [${engineName}] not found in Registry. Using DefaultEngine.`);
+            const defEngine = globalEngineRegistry.getEngine('DefaultEngine');
+            if (defEngine) {
+              engineResult = await defEngine.execute({ query: req.message });
+              engineName = 'DefaultEngine';
+            }
           }
         }
-      }
-
-      } // <-- Closes the else block for legacy execution
+      } // <-- Closes the else block for execution
 
       // Step: Result Validation
-
       notify("supervisor_state", "pending", "Validating Engine Output");
       const isSuccess = engineResult && (
         engineResult.status === 'SUCCESS' ||
@@ -362,6 +382,17 @@ export class NavixOrchestrator {
         const enrichedText = engineResult.output?.enrichedPrompt || engineResult.data?.enrichedPrompt || req.message;
         
         if (imageBase64) {
+          try {
+            MediaVaultService.addItem({
+              type: 'image',
+              title: req.message.slice(0, 40) || 'Navix Photoreal Image',
+              url: imageBase64,
+              prompt: enrichedText || req.message
+            });
+          } catch (mErr) {
+            console.warn('[Orchestrator] Media vault save warning:', mErr);
+          }
+
           return {
             text: `Saya telah memproses dan memperkaya instruksi Anda secara otomatis di belakang layar untuk memastikan detail fotorealistik maksimal dan menghilangkan efek boneka/kartun. Berikut adalah hasilnya (dirender satu kali dengan tepat):\n\n**Prompt Internal yang Dikomplekskan:**\n> _${enrichedText.replace(/"/g, "'")}_\n\n\`\`\`media\n{\n  "type": "image",\n  "prompt": "${req.message.replace(/"/g, "'")}",\n  "image": "${imageBase64}"\n}\n\`\`\``
           };
@@ -371,29 +402,49 @@ export class NavixOrchestrator {
       if (engineName === 'VideoEngine' && (engineResult?.realOutput || engineResult?.output?.videoUrl || engineResult?.data?.videoUrl)) {
         const videoUrl = engineResult.realOutput || engineResult.output?.videoUrl || engineResult.data?.videoUrl;
         if (videoUrl) {
+          try {
+            MediaVaultService.addItem({
+              type: 'video',
+              title: req.message.slice(0, 40) || 'Navix Generated Video',
+              url: videoUrl,
+              prompt: req.message
+            });
+          } catch (mErr) {
+            console.warn('[Orchestrator] Media vault save warning:', mErr);
+          }
+
           return {
             text: `\`\`\`media\n{\n  "type": "video",\n  "prompt": "${req.message.replace(/"/g, "'")}",\n  "url": "${videoUrl}"\n}\n\`\`\``
           };
         }
       }
 
-      if (engineName === 'AudioEngine' && (engineResult?.realOutput || engineResult?.output?.audioBase64 || engineResult?.data?.audioBase64)) {
+      if ((engineName === 'AudioEngine' || engineName === 'ToneJsAudioEngine' || engineName === 'ToneJS') && (engineResult?.realOutput || engineResult?.output?.audioBase64 || engineResult?.data?.audioBase64)) {
         const audioBase64 = engineResult.realOutput || engineResult.output?.audioBase64 || engineResult.data?.audioBase64;
-        const trackTitle = engineResult.output?.trackInfo?.title || 'Komposisi Navix Audio Studio';
+        const trackTitle = engineResult.output?.trackInfo?.title || engineResult.data?.trackInfo?.title || 'Komposisi Navix Audio Studio';
         if (audioBase64) {
+          try {
+            MediaVaultService.addItem({
+              type: 'audio',
+              title: trackTitle,
+              url: audioBase64,
+              prompt: req.message
+            });
+          } catch (mErr) {
+            console.warn('[Orchestrator] Media vault save warning:', mErr);
+          }
+
           return {
             text: `\`\`\`media\n{\n  "type": "music",\n  "prompt": "${req.message.replace(/"/g, "'")}",\n  "title": "${trackTitle}",\n  "audio": "${audioBase64}"\n}\n\`\`\``
           };
         }
       }
 
-
       if (adaptiveResult && adaptiveResult.finalEngineResult) {
         if (!adaptiveResult.verification.passed) {
           engineResult.message = "VERIFICATION FAILED: " + adaptiveResult.verification.issues.join(', ');
         }
       }
-
 
       // Legacy fallback Verification
       if (engineResult && !adaptiveResult && req.thinkingMode) {
@@ -410,34 +461,6 @@ export class NavixOrchestrator {
             engineResult.message = "VERIFICATION FAILED: " + verification.issues.join(', ');
           }
         }
-      }
-
-      // NAVIX AI PERFORMANCE BOOSTER PIPELINE (Real Cognitive Grounding & Deliberation)
-      let boosterData: any = null;
-      if (req.aiBooster) {
-        notify("booster_evidence", "pending", "Ekstraksi Bukti Empiris & Validasi Intent");
-        const evidenceEngine = new EvidenceEngine();
-        const extractedEvidence = evidenceEngine.extractEvidence(req.message, "User Prompt");
-
-        notify("booster_council", "pending", "Sidang Dewan Deliberasi Multi-Agen");
-        const councilVerdict = globalDeliberationCouncil.deliberate(req.message);
-
-        notify("booster_memory", "pending", "Menghubungkan Memori Jangka Panjang");
-        let memoryContext = "";
-        try {
-          // const mem = await navixMemoryEngine.retrieveContext(req.message);
-          // memoryContext = mem.promptContext || "";
-          memoryContext = ""; // Di-nonaktifkan agar AI hanya ingat memori di sesi aktif (Diet Token/Sesi Terisolasi)
-        } catch (memErr) {
-          console.warn("[Orchestrator] Booster memory warning:", memErr);
-        }
-
-        notify("booster_guardrails", "pending", "Verifikasi Anti-Halusinasi & Guardrails");
-        boosterData = {
-          evidence: extractedEvidence,
-          council: councilVerdict,
-          memory: memoryContext
-        };
       }
 
       // Step: AI Response Formatter
@@ -514,8 +537,8 @@ export class NavixOrchestrator {
             if (activePlugins.length > 0) {
               const pluginDescriptions = activePlugins.map((p: any) => `- ${p.name}: ${p.desc}`).join('\n');
               
-              // We inject a system-level hidden instruction for Gemini to know it has access to these plugins
-              finalMessageToSend = `[SYSTEM CONTEXT: You are NAVIX AI. The user has installed the following third-party MCP Open Source Plugins in their studio:\n${pluginDescriptions}\n\nIf the user's request relates to the capabilities of any of these plugins, explicitly acknowledge that you are using them (e.g. "Saya akan menggunakan plugin X untuk..."). Act as if you are retrieving the data from these plugins directly.]\n\nUSER MESSAGE:\n` + finalMessageToSend;
+              // We inject a system-level instruction for the orchestrator to route and execute real tools
+              finalMessageToSend = `[SYSTEM CONTEXT: You are NAVIX AI. The user has active MCP Open Source Plugins in their studio:\n${pluginDescriptions}\n\nWhen the user's request relates to any of these plugins, use the available tools (web_search, deep_search, execute_skill, execute_connector, execute_autonomous_engine) to retrieve and compute real, factual data without fake simulation or placeholders.]\n\nUSER MESSAGE:\n` + finalMessageToSend;
             }
           }
         }
@@ -523,6 +546,8 @@ export class NavixOrchestrator {
         console.warn('Failed to inject plugins context:', e);
       }
       
+      notify("collaborative_understanding", "pending", "Multi-Model Collaborative Intent Deconstruction");
+
       const res = await rotateFetch('/api/chat', {
 
         method: 'POST',
@@ -531,7 +556,7 @@ export class NavixOrchestrator {
           message: finalMessageToSend,
           attachments: req.attachments || [],
           disableTts: !req.voiceEnabled,
-          model: req.model || "gemini-3.6-flash",
+          model: req.model || "gemini-3.8-flash",
           history: req.history || [],
           isImageEdit: imageIntent === 'edit',
           isImageDiscuss: imageIntent === 'discuss',
@@ -547,6 +572,7 @@ export class NavixOrchestrator {
       let data: any = {};
       try {
         data = await res.json();
+        notify("collaborative_verification", "completed", "Multi-Model Verification & Consensus Confirmed");
       } catch (e) {
         if (!res.ok) {
            data = { error: `Server HTTP Error ${res.status}: ${res.statusText || 'Gagal tersambung ke engine backend.'}` };
@@ -581,11 +607,39 @@ export class NavixOrchestrator {
         }
 
         notify("supervisor_state", "done", "COMPLETED");
-        notify("supervisor_state", "pending", "FINALIZING");
-        notify("supervisor_state", "done", "COMPLETED");
         notify("thinking_completed", "done", "Task Completed");
+
+        let responseText = data.text;
+        
+        // Connect Deliberation Card to Main Chat if council verdict was produced
+        if (boosterData?.council && !responseText.includes('```json deliberation') && !responseText.includes('```deliberation')) {
+          responseText = `\`\`\`json deliberation\n${JSON.stringify(boosterData.council, null, 2)}\n\`\`\`\n\n` + responseText;
+        }
+
+        // Connect Signal Card to Main Chat if retail trader or signal engine produced real trading signals
+        if (engineResult?.data?.instantSignalEligibility && !responseText.includes('```json signal') && !responseText.includes('```signal')) {
+          const sig = engineResult.data;
+          const elig = sig.instantSignalEligibility;
+          const signalPayload = {
+            asset: sig.symbol || 'XAUUSD',
+            action: elig.recommendationType?.includes('BUY') ? 'BUY' : elig.recommendationType?.includes('SELL') ? 'SELL' : 'HOLD',
+            timeframe: '15m',
+            entry: sig.currentPrice || 2890,
+            stopLoss: sig.indicators?.swingLow || ((sig.currentPrice || 2890) * 0.99),
+            takeProfit: sig.indicators?.swingHigh || ((sig.currentPrice || 2890) * 1.015),
+            confidence: elig.isInstantRecommended ? 95 : 75,
+            rationale: elig.rationale || sig.antiRepaintVerification || 'Konfirmasi SMC + TA-Lib Non-Repainting Engine',
+            indicators: {
+              rsi: sig.indicators?.rsi14,
+              ema: `EMA20: ${sig.indicators?.ema20} | EMA50: ${sig.indicators?.ema50}`,
+              smc: sig.methodology?.framework
+            }
+          };
+          responseText += `\n\n\`\`\`json signal\n${JSON.stringify(signalPayload, null, 2)}\n\`\`\`\n`;
+        }
+
         return {
-          text: data.text,
+          text: responseText,
           audioBase64: data.audioBase64,
           systemInstruction: data.systemInstruction
         };

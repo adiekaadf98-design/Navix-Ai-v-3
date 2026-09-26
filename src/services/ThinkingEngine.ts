@@ -14,7 +14,9 @@ export type TaskType =
   | "data_analysis"
   | "project"
   | "memory"
-  | "knowledge_lab";
+  | "knowledge_lab"
+  | "quiz"
+  | "skill";
 
 export type Complexity = "simple" | "normal" | "hard" | "critical";
 
@@ -104,6 +106,30 @@ export function classifyTask(input: string): {
 } {
   const text = input.toLowerCase();
 
+  // 1. Explicit tags from Chat Input (+)
+  if (text.includes("@trading")) return { taskType: "trading", complexity: "critical" };
+  if (text.includes("@image") || text.includes("@stok_foto")) return { taskType: "image", complexity: "normal" };
+  if (text.includes("@video")) return { taskType: "video", complexity: "hard" };
+  if (text.includes("@audio")) return { taskType: "audio", complexity: "hard" };
+  if (text.includes("@drive")) return { taskType: "document", complexity: "normal" };
+  if (text.includes("@penelitian")) return { taskType: "knowledge_lab", complexity: "critical" };
+  if (text.includes("@map")) return { taskType: "research", complexity: "normal" };
+  if (text.includes("@pilgun") || text.includes("kuis interaktif") || text.includes("pilihan ganda")) return { taskType: "quiz", complexity: "normal" };
+  if (text.includes("@skill")) {
+    if (text.includes("crypto_hash") || text.includes("hash_generator") || text.includes("sql_query") || text.includes("sanitizer") || text.includes("vercel") || text.includes("stripe") || text.includes("firecrawl") || text.includes("resend") || text.includes("posthog") || text.includes("mcp")) {
+      return { taskType: "skill", complexity: "hard" };
+    }
+    if (text.includes("gambar") || text.includes("foto") || text.includes("desain")) return { taskType: "image", complexity: "normal" };
+    if (text.includes("video") || text.includes("animasi")) return { taskType: "video", complexity: "hard" };
+    if (text.includes("audio") || text.includes("musik")) return { taskType: "audio", complexity: "hard" };
+    if (text.includes("trading") || text.includes("chart") || text.includes("forex") || text.includes("saham") || (text.includes("crypto") && (text.includes("pasar") || text.includes("analis") || text.includes("sinyal") || text.includes("harga") || text.includes("trade")))) return { taskType: "trading", complexity: "critical" };
+    if (text.includes("koding") || text.includes("kode") || text.includes("script") || text.includes("deploy")) return { taskType: "code", complexity: "hard" };
+    if (text.includes("dokumen") || text.includes("pdf") || text.includes("laporan")) return { taskType: "document", complexity: "normal" };
+    if (text.includes("data") || text.includes("analisis data") || text.includes("statistik")) return { taskType: "data_analysis", complexity: "hard" };
+    if (text.includes("cari") || text.includes("riset") || text.includes("search")) return { taskType: "research", complexity: "normal" };
+    return { taskType: "skill", complexity: "hard" };
+  }
+
   // Project / Complex Task
   if (text.includes("periksa project") || text.includes("perbaiki") || text.includes("optimalkan") || text.includes("periksa seluruh file") || text.includes("audit project") || text.includes("jangan sampai ada yang tertinggal")) {
     return { taskType: "project", complexity: "critical" };
@@ -119,7 +145,7 @@ export function classifyTask(input: string): {
     return { taskType: "code", complexity: "hard" };
   }
 
-  if (text.includes("file") || text.includes("baca file")) {
+  if (text.includes("baca file") || text.includes("file analysis") || text.includes("inspeksi file")) {
     return { taskType: "file_analysis", complexity: "hard" };
   }
 
@@ -138,8 +164,20 @@ export function classifyTask(input: string): {
     return { taskType: "audio", complexity: "hard" };
   }
 
-  // Trading
-  if (text.includes("trading") || text.includes("hh") || text.includes("hl") || text.includes("ll") || text.includes("lh") || text.includes("s&r") || text.includes("market") || text.includes("crypto") || text.includes("bitcoin") || text.includes("signal") || text.includes("entry") || text.includes("smc")) {
+  // Trading: check for real trading terminology or crypto/forex pairs with action intent
+  const isDirectTrading = 
+    text.includes("trading") || text.includes("smc") || text.includes("smart money") || 
+    text.includes("order block") || text.includes("fair value gap") || text.includes("fvg") ||
+    text.includes("candlestick") || text.includes("break of structure") || text.includes("change of character") ||
+    text.includes("take profit") || text.includes("stop loss") || text.includes("sinyal trading") ||
+    text.includes("analisa chart") || text.includes("analisa pasar") || text.includes("market structure") ||
+    text.includes("higher high") || text.includes("lower low") || text.includes("saham") || text.includes("ihsg") || text.includes("idx");
+
+  const hasPairAndAction = 
+    /(btc|eth|sol|doge|xrp|bnb|ada|avax|near|sui|pepe|xau|xauusd|gold|emas|eurusd|gbpusd|usdjpy|btcusdt|ethusdt|solusdt)/i.test(text) &&
+    /(analis|chart|harga|candle|beli|jual|buy|sell|sl|tp|long|short|timeframe|tf|setup|entry|tren|trend|sinyal|signal)/i.test(text);
+
+  if (isDirectTrading || hasPairAndAction) {
     return { taskType: "trading", complexity: "critical" };
   }
 
@@ -149,7 +187,7 @@ export function classifyTask(input: string): {
   }
 
   // Data Analysis
-  if (text.includes("analisis data") || text.includes("dataset") || text.includes("statistik") || text.includes("chart") || text.includes("forecasting") || text.includes("visualisasi")) {
+  if (text.includes("analisis data") || text.includes("dataset") || text.includes("statistik") || text.includes("chart data") || text.includes("forecasting") || text.includes("visualisasi data")) {
     return { taskType: "data_analysis", complexity: "hard" };
   }
 
@@ -203,138 +241,134 @@ export function createTaskPlan(
   input: string,
   taskType: TaskType,
   complexity: Complexity,
-  maxSteps: number
+  maxSteps?: number,
+  effort?: EffortLevel | string
 ): TaskPlan {
-  // Generate highly customized pathways based on taskType to respect user intent perfectly
+  const resolvedEffort = (effort as EffortLevel) || decideEffort(taskType, complexity, effort);
+  
+  // Base customized pathways based on taskType and scaled by effort level
   let selectedSteps: string[] = [];
 
-  switch (taskType) {
-    case "image":
-      selectedSteps = [
-        "Sidang Dewan Diskusi Di Balik Layar (Dekonstruksi Intent & Anti-Ngawur)",
-        "Mesin Media Multimodal",
-        "Parameter Setup & Optical Processing",
-        "Generative Prompt Engineering",
-        "High-Res Rendering & Upscaling",
-        "Output Canvas Verification & Delivery"
-      ];
-      break;
-    case "code":
-      selectedSteps = [
-        "Sidang Dewan Diskusi Di Balik Layar (Dekonstruksi Intent & Anti-Malas)",
-        "Mesin Koding & Studio Canvas",
-        "React Component & Logic Blueprinting",
-        "Tailwind CSS & UI Structuring",
-        "Virtual Sandbox Compilation",
-        "100% Executable Output Delivery"
-      ];
-      break;
-    case "trading":
-      selectedSteps = [
-        "Sidang Dewan Diskusi Di Balik Layar (Audit Risiko & Validasi Pasar)",
-        "Market & Quant Engine (CCXT Live Feed)",
-        "TA-Lib Math & SMC Calculation",
-        "Key Support & Resistance Validation",
-        "Risk/Reward & SL/TP Validation Setup",
-        "Final Sinyal & Checklist Verifikasi"
-      ];
-      break;
-    case "document":
-      selectedSteps = [
-        "Sidang Dewan Diskusi Di Balik Layar (Dekonstruksi Intent & Struktur)",
-        "Mesin Dokumen & Konten Kreatif",
-        "Data Extraction & Information Tagging",
-        "Data Point Validation & Cross-checking",
-        "Polished Document Synthesis"
-      ];
-      break;
-    case "video":
-      selectedSteps = [
-        "Sidang Dewan Diskusi Di Balik Layar (Sinematografi & Motion Planning)",
-        "Mesin Media Multimodal (Video)",
-        "Visual Storyboarding & Planning",
-        "Scene Motion & 24fps Cinematography",
-        "Keyframe Interpolation Processing",
-        "Output Video Rendering Delivery"
-      ];
-      break;
-    case "audio":
-      selectedSteps = [
-        "Sidang Dewan Diskusi Di Balik Layar (Harmoni & Komposisi)",
-        "Mesin Media Multimodal (Audio)",
-        "Audio Transformation Analysis",
-        "Polyphonic Soundtrack Generation",
-        "Audio Processing & Syncing",
-        "Harmonic Quality Checking"
-      ];
-      break;
-    case "file_analysis":
-      selectedSteps = [
-        "Sidang Dewan Diskusi Di Balik Layar (Pemetaan Dependensi & Audit)",
-        "Mesin Riset & Direktori GitHub",
-        "File Discovery & Aggregation",
-        "Architecture & Dependency Analysis",
-        "Problem Detection & Optimization",
-        "Verification"
-      ];
-      break;
-    case "security":
-      selectedSteps = [
-        "Sidang Dewan Diskusi Di Balik Layar (Zero-Trust Security Assessment)",
-        "Mesin Riset & Direktori GitHub (Security)",
-        "System Scan & Vulnerability Detection",
-        "Risk Analysis & Classification",
-        "Security Remediation Planning"
-      ];
-      break;
-    case "research":
-      selectedSteps = [
-        "Sidang Dewan Diskusi Di Balik Layar (Uji Falsifikasi & Anti-Halusinasi)",
-        "Mesin Laboratorium Riset Ilmiah (Autonomous Lab)",
-        "Autonomous Literature Mining",
-        "Hypothesis Formulation (H0/H1)",
-        "In-Silico Monte Carlo Simulation",
-        "Empirical Statistical Analysis (T-Test)",
-        "Peer-Review & Falsification Engine",
-        "IMRaD Academic Report Generation"
-      ];
-      break;
-    case "data_analysis":
-      selectedSteps = [
-        "Navix Dispatcher & Router",
-        "Mesin Komputasi & Matematika",
-        "Dataset Discovery & Cleaning",
-        "Pattern Analysis & Statistics",
-        "Chart & Data Visualization Generation",
-        "Forecasting & Prediction Model",
-        "Data Synthesis"
-      ];
-      break;
-    case "project":
-      selectedSteps = [
-        "Task Decomposition",
-        "Execution (Identify, Fix, Optimize)",
-        "Verification & Testing",
-        "Completion Check"
-      ];
-      break;
-    case "memory":
-      selectedSteps = [
-        "Memory Retrieval & Context Scanning",
-        "Context Association",
-        "Knowledge Application"
-      ];
-      break;
-    case "chat":
-    default:
-      // Discussion Mode won't reach here as it has thinking disabled mostly,
-      // but in case it's forced, use simple steps.
-      selectedSteps = [
-        "Intent Intelligence",
-        "Single Engine Processing",
-        "FINAL OUTPUT"
-      ];
-      break;
+  if (resolvedEffort === 'low') {
+    selectedSteps = [
+      "Identifikasi Cepat & Ekstraksi Maksud",
+      "Sintesis Langsung & Penyampaian Output"
+    ];
+  } else if (resolvedEffort === 'medium') {
+    switch (taskType) {
+      case "image":
+        selectedSteps = [
+          "Dekonstruksi Intent Visual",
+          "Parameter Setup & Optical Processing",
+          "Generative Prompt Engineering",
+          "Output Canvas Verification & Delivery"
+        ];
+        break;
+      case "code":
+        selectedSteps = [
+          "Dekonstruksi Persyaratan Koding",
+          "React Component & Logic Blueprinting",
+          "Virtual Sandbox Compilation",
+          "Executable Output Delivery"
+        ];
+        break;
+      case "trading":
+        selectedSteps = [
+          "Audit Risiko & Pembacaan Data Pasar",
+          "TA-Lib Math & SMC Calculation",
+          "Risk/Reward & SL/TP Validation",
+          "Final Sinyal & Rekomendasi Disiplin"
+        ];
+        break;
+      default:
+        selectedSteps = [
+          "Pemahaman Konteks & Intent Pengguna",
+          "Perumusan Strategi & Pengambilan Data",
+          "Pemrosesan Mesin & Formulasi Solusi",
+          "Verifikasi Akhir & Penyajian Jawaban"
+        ];
+        break;
+    }
+  } else if (resolvedEffort === 'high') {
+    switch (taskType) {
+      case "image":
+        selectedSteps = [
+          "Sidang Dewan Diskusi (Dekonstruksi Intent & Komposisi)",
+          "Mesin Media Multimodal & Parameter Setup",
+          "Generative Prompt Engineering 8K Fotorealistis",
+          "High-Res Neural Rendering & Upscaling",
+          "Audit Kualitas Visual & Anti-Artifak",
+          "Output Canvas Verification & Delivery"
+        ];
+        break;
+      case "code":
+        selectedSteps = [
+          "Sidang Dewan Diskusi (Dekonstruksi Intent & Anti-Malas)",
+          "Mesin Koding & Arsitektur Solusi",
+          "React Component & Logic Blueprinting",
+          "Tailwind CSS & UI Structuring",
+          "Virtual Sandbox Compilation & Logic Audit",
+          "Verifikasi Integritas & 100% Executable Output"
+        ];
+        break;
+      case "trading":
+        selectedSteps = [
+          "Sidang Dewan Diskusi (Audit Risiko & Struktur Pasar)",
+          "Market & Quant Engine (Live Feed Spot)",
+          "TA-Lib Math & SMC Calculation (FVG / BOS)",
+          "Key Support & Resistance Validation",
+          "Risk/Reward & SL/TP Invariant Setup",
+          "Audit Sinyal Terverifikasi & Rekomendasi Disiplin"
+        ];
+        break;
+      default:
+        selectedSteps = [
+          "Sidang Dewan Diskusi Di Balik Layar (Dekonstruksi Mendalam)",
+          "Analisis Konteks & Pemetaan Dependensi Logika",
+          "Tree-of-Thought: Eksplorasi Hipotesis & Sudut Pandang",
+          "Eksekusi Komputasi & Pemrosesan Data Inti",
+          "Adversarial Debate: Audit Kelemahan & Anti-Halusinasi",
+          "Sintesis Solusi Menyeluruh & Komprehensif",
+          "Verifikasi Kualitas, Format & Penyelarasan Akhir"
+        ];
+        break;
+    }
+  } else if (resolvedEffort === 'extra') {
+    selectedSteps = [
+      "Inisialisasi Sidang Dewan Penalaran Ekstra (Tier High-Rigor)",
+      "Dekonstruksi Maksud Pengguna & Batasan Implisit",
+      "Eksplorasi Multi-Branch Tree of Thought (ToT)",
+      "Pemeriksaan Silang & Pemanggilan Mesin Spesialis Terpadu",
+      "Adversarial Devil's Advocate: Uji Logika & Kontradiksi",
+      "Mitigasi Risiko & Validasi Edge-Cases",
+      "Self-Refine Pass 1: Pengayaan Argumen & Bukti Empiris",
+      "Self-Refine Pass 2: Audit Sintaks, Format & Integritas",
+      "Sintesis Solusi Master Terstruktur",
+      "Final Verification Gate & Output Delivery"
+    ];
+  } else { // 'max'
+    selectedSteps = [
+      "Inisialisasi Full AGI Deliberation Council (Effort Maksimal)",
+      "Dekonstruksi Sasaran Inti & Pemetaan Ambiguity Matrix",
+      "Pencarian Kontekstual & Integrasi Kompas Memori Jangka Panjang",
+      "Multi-Branch Tree-of-Thought (ToT) Hypothesis Generation",
+      "Orkestrasi Mesin Otonom & Pengambilan Data Empiris",
+      "Adversarial Debate: Devil's Advocate Audit Berpikir Kritis",
+      "Strict Grounding: Pemisahan Fakta Terbukti vs Hipotesis",
+      "Uji Ketahanan Logika & Simulasi Kasus Ekstrem (Edge Cases)",
+      "Matriks Evaluasi Risiko & Formula Solusi Optimal",
+      "Penyusunan Draf Solusi Holistik & Anti-Kemalasan",
+      "Self-Correction & Refinement Pass Lapisan 1",
+      "Self-Correction & Refinement Pass Lapisan 2",
+      "Verifikasi Keamanan, Invariant Finansial / Sintaks Kode",
+      "Penyelarasan Gaya Bahasa Elegan, Edukatif & Manusiawi",
+      "Konsensus Puncak AI & Penyerahan Output Terverifikasi 100%"
+    ];
+  }
+
+  // If maxSteps is explicitly provided and smaller than selectedSteps, respect it
+  if (maxSteps && maxSteps > 0 && selectedSteps.length > maxSteps) {
+    selectedSteps = selectedSteps.slice(0, maxSteps);
   }
 
   return {
@@ -342,6 +376,7 @@ export function createTaskPlan(
     subGoals: [
       `Jenis tugas: ${taskType}`,
       `Kompleksitas: ${complexity}`,
+      `Tingkatan Berpikir: ${resolvedEffort.toUpperCase()}`,
       `Langkah aktif: ${selectedSteps.length}`
     ],
     steps: selectedSteps,

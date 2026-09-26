@@ -50,16 +50,16 @@ export class CapabilityRegistryService {
 
         // 1. TEXT_TO_TEXT
         try {
-            await this.ai.models.generateContent({ model: 'gemini-3.6-flash', contents: 'ping' });
+            await this.ai.models.generateContent({ model: 'gemini-3.8-flash', contents: 'ping' });
             this.registerCapability('TEXT_TO_TEXT', {
-                provider: 'google', model_id: 'gemini-3.6-flash', input_capabilities: ['text'], output_capabilities: ['text'],
+                provider: 'google', model_id: 'gemini-3.8-flash', input_capabilities: ['text'], output_capabilities: ['text'],
                 free_tier: true, quota_status: 'AVAILABLE', verified: true, last_verified: Date.now(), error_code: null, status: 'VERIFIED_FREE'
             });
             console.log("TEXT_TO_TEXT: VERIFIED_FREE");
         } catch (e: any) {
             const err = String(e?.message || e);
             this.registerCapability('TEXT_TO_TEXT', {
-                provider: 'google', model_id: 'gemini-3.6-flash', input_capabilities: ['text'], output_capabilities: ['text'],
+                provider: 'google', model_id: 'gemini-3.8-flash', input_capabilities: ['text'], output_capabilities: ['text'],
                 free_tier: true, quota_status: err.includes('429') || err.toLowerCase().includes('quota') ? 'EXHAUSTED' : 'UNKNOWN',
                 verified: false, last_verified: Date.now(), error_code: err, status: err.includes('429') ? 'NOT_AVAILABLE_FREE' : 'MODEL_NOT_AVAILABLE'
             });

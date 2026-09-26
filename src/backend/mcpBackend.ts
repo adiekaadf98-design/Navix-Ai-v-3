@@ -4,7 +4,7 @@ import vm from "node:vm";
 import { fileEngine } from "./engines/FileEngine";
 import { searchEngine } from "./engines/SearchEngine";
 
-export type PluginStatus = "DISCOVERED" | "READY" | "FAILED";
+export type PluginStatus = "DISCOVERED" | "READY" | "FAILED" | "DISCONNECTED";
 
 export interface ServerState {
   name: string;
@@ -15,11 +15,24 @@ export interface ServerState {
 const mcpClients = new Map<string, Client>();
 const serverStates = new Map<string, ServerState>();
 
-// Known catalog of discovered MCP servers
+// Builtin servers handled internally
+export const BUILTIN_SERVERS = new Set([
+  "filesystem",
+  "file_system",
+  "fetch",
+  "git",
+  "memory"
+]);
+
+// Initialize builtin servers as READY, others as DISCONNECTED
 const KNOWN_SERVERS = [
+  "filesystem",
+  "file_system",
+  "fetch",
+  "git",
+  "memory",
   "market_engine",
   "code_sandbox",
-  "file_system",
   "web_search",
   "semgrep",
   "typescript_validator",
@@ -28,16 +41,30 @@ const KNOWN_SERVERS = [
   "everything"
 ];
 
-// Initialize discovered servers
 for (const s of KNOWN_SERVERS) {
-  serverStates.set(s, { name: s, status: "READY" });
+  if (BUILTIN_SERVERS.has(s)) {
+    serverStates.set(s, { name: s, status: "READY" });
+  } else {
+    serverStates.set(s, { name: s, status: "DISCONNECTED" });
+  }
+}
+
+export function isBuiltinServer(name: string): boolean {
+  return BUILTIN_SERVERS.has(name.toLowerCase());
 }
 
 export function getServerStatus(serverName: string): ServerState {
-  if (serverStates.has(serverName)) {
-    return serverStates.get(serverName)!;
+  const norm = serverName.toLowerCase();
+  if (mcpClients.has(norm)) {
+    return { name: serverName, status: "READY" };
   }
-  return { name: serverName, status: "DISCOVERED" };
+  if (serverStates.has(norm)) {
+    return serverStates.get(norm)!;
+  }
+  if (isBuiltinServer(norm)) {
+    return { name: serverName, status: "READY" };
+  }
+  return { name: serverName, status: "DISCONNECTED" };
 }
 
 export function listAllServers(): ServerState[] {
@@ -45,11 +72,12 @@ export function listAllServers(): ServerState[] {
 }
 
 export async function connectMcpServer(serverName: string, command: string, args: string[]) {
-  if (mcpClients.has(serverName)) {
-    return mcpClients.get(serverName)!;
+  const norm = serverName.toLowerCase();
+  if (mcpClients.has(norm)) {
+    return mcpClients.get(norm)!;
   }
 
-  serverStates.set(serverName, { name: serverName, status: "DISCOVERED" });
+  serverStates.set(norm, { name: serverName, status: "DISCOVERED" });
   console.log(`[MCP] Connecting to server ${serverName} using ${command} ${args.join(" ")}`);
 
   try {
@@ -66,52 +94,33 @@ export async function connectMcpServer(serverName: string, command: string, args
     });
 
     await client.connect(transport);
-    mcpClients.set(serverName, client);
-    serverStates.set(serverName, { name: serverName, status: "READY" });
+    mcpClients.set(norm, client);
+    serverStates.set(norm, { name: serverName, status: "READY" });
     return client;
   } catch (err: any) {
     console.warn(`[MCP] Stdio connect failed for ${serverName}:`, err?.message);
-    serverStates.set(serverName, { name: serverName, status: "FAILED", lastError: err?.message });
+    serverStates.set(norm, { name: serverName, status: "FAILED", lastError: err?.message });
     return null;
   }
 }
 
 export async function discoverTools(serverName: string) {
-  const client = mcpClients.get(serverName);
+  const norm = serverName.toLowerCase();
+  const client = mcpClients.get(norm);
   if (client) {
     try {
       const response = await client.listTools();
-      serverStates.set(serverName, { name: serverName, status: "READY" });
+      serverStates.set(norm, { name: serverName, status: "READY" });
       return response.tools;
     } catch (e: any) {
       console.warn(`[MCP] Error calling listTools on ${serverName}:`, e?.message);
-      serverStates.set(serverName, { name: serverName, status: "FAILED", lastError: e?.message });
+      serverStates.set(norm, { name: serverName, status: "FAILED", lastError: e?.message });
+      return [];
     }
   }
 
-  // Real tool definitions mapped to actual backend services
-  if (serverName === "market_engine" || serverName.includes("market") || serverName.includes("trading")) {
-    return [
-      {
-        name: "get_market_price",
-        description: "Mengambil harga real-time live tick dari bursa untuk pasangan simbol tertentu.",
-        inputSchema: { type: "object", properties: { symbol: { type: "string" } }, required: ["symbol"] }
-      },
-      {
-        name: "get_market_klines",
-        description: "Mengambil data candlestick resmi dari bursa untuk analisis teknikal.",
-        inputSchema: { type: "object", properties: { symbol: { type: "string" }, interval: { type: "string" }, limit: { type: "number" } }, required: ["symbol"] }
-      }
-    ];
-  } else if (serverName === "code_sandbox" || serverName.includes("code") || serverName.includes("sandbox") || serverName.includes("exec")) {
-    return [
-      {
-        name: "execute_code",
-        description: "Mengeksekusi kode JavaScript dalam isolated VM sandbox yang aman.",
-        inputSchema: { type: "object", properties: { code: { type: "string" } }, required: ["code"] }
-      }
-    ];
-  } else if (serverName === "file_system" || serverName.includes("file")) {
+  // Real tool definitions for built-in repository capabilities
+  if (norm === "filesystem" || norm === "file_system") {
     return [
       {
         name: "file_scan_malware",
@@ -119,309 +128,98 @@ export async function discoverTools(serverName: string) {
         inputSchema: { type: "object", properties: { filename: { type: "string" }, content: { type: "string" } }, required: ["filename"] }
       }
     ];
-  } else if (serverName === "web_search" || serverName.includes("search")) {
+  } else if (norm === "fetch") {
     return [
       {
-        name: "web_search",
-        description: "Pencarian web langsung ke provider eksternal terpercaya.",
-        inputSchema: { type: "object", properties: { query: { type: "string" } }, required: ["query"] }
+        name: "fetch_url",
+        description: "Melakukan HTTP request GET ke URL eksternal secara aman.",
+        inputSchema: { type: "object", properties: { url: { type: "string" } }, required: ["url"] }
       }
     ];
-  } else if (serverName === "typescript_validator" || serverName === "microsoft") {
+  } else if (norm === "git") {
     return [
       {
-        name: "typescript_check",
-        description: "Memverifikasi integritas sintaksis dan struktur kode TypeScript / JavaScript.",
-        inputSchema: { type: "object", properties: { code: { type: "string" } }, required: ["code"] }
+        name: "git_status",
+        description: "Memeriksa status git working directory.",
+        inputSchema: { type: "object", properties: {} }
       }
     ];
-  } else if (serverName === "firebase") {
+  } else if (norm === "memory") {
     return [
       {
-        name: "firebase_validate_rules",
-        description: "Memverifikasi struktur dan sintaks security rules Firestore.",
-        inputSchema: { type: "object", properties: { rules: { type: "string" } }, required: ["rules"] }
-      }
-    ];
-  } else if (serverName === "semgrep") {
-    return [
-      {
-        name: "semgrep_scan_code",
-        description: "Memindai pola kerentanan kode SAST (eval, insecure injection, dsb).",
-        inputSchema: { type: "object", properties: { code: { type: "string" } }, required: ["code"] }
+        name: "memory_store",
+        description: "Menyimpan atau membaca memori kontekstual sesi.",
+        inputSchema: { type: "object", properties: { key: { type: "string" }, value: { type: "string" } }, required: ["key"] }
       }
     ];
   }
 
-  // Default tools if server is registered
-  return [
-    {
-      name: "execute",
-      description: `Eksekusi terarah pada server provider ${serverName}`,
-      inputSchema: { type: "object", properties: { query: { type: "string" } } }
-    }
-  ];
+  // If server is not builtin and not connected via client: Status is DISCONNECTED, tools is []
+  serverStates.set(norm, { name: serverName, status: "DISCONNECTED" });
+  return [];
 }
 
 export async function executeTool(serverName: string, toolName: string, args: any) {
+  const normServer = serverName.toLowerCase();
+  const normTool = toolName.toLowerCase();
+
   // 1. If connected via genuine MCP Stdio Client, delegate directly to the MCP server
-  const client = mcpClients.get(serverName);
+  const client = mcpClients.get(normServer);
   if (client) {
     try {
       const response = await client.callTool({
         name: toolName,
         arguments: args
       });
-      serverStates.set(serverName, { name: serverName, status: "READY" });
+      serverStates.set(normServer, { name: serverName, status: "READY" });
       return response;
     } catch (e: any) {
       console.warn(`[MCP] Direct callTool failed for ${serverName}/${toolName}:`, e?.message);
-      serverStates.set(serverName, { name: serverName, status: "FAILED", lastError: e?.message });
+      serverStates.set(normServer, { name: serverName, status: "FAILED", lastError: e?.message });
       throw new Error(`MCP_REMOTE_EXECUTION_FAILED: ${e?.message || "Gagal memanggil remote MCP tool"}`);
     }
   }
 
-  // 2. Real Tool Execution mapped to actual repository engines
-  const normServer = serverName.toLowerCase();
-  const normTool = toolName.toLowerCase();
-
-  // A. Market Analysis / Live Market Price
-  if (
-    normTool === "get_market_price" ||
-    normTool === "market_price" ||
-    normTool === "market_analysis" ||
-    normServer === "market_engine" ||
-    (normTool === "execute" && (normServer.includes("market") || normServer.includes("trading") || normServer.includes("crypto") || normServer.includes("binance")))
-  ) {
-    const rawSymbol = args?.symbol || args?.query || "BTCUSDT";
-    const cleanSymbol = rawSymbol.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-
-    try {
-      const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(cleanSymbol)}`);
-      if (res.ok) {
-        const data: any = await res.json();
-        return {
-          content: [{
-            type: "text",
-            text: JSON.stringify({
-              engine: "Navix Live Exchange Engine",
-              symbol: cleanSymbol,
-              price: parseFloat(data.lastPrice),
-              change24h: parseFloat(data.priceChangePercent),
-              high24h: parseFloat(data.highPrice),
-              low24h: parseFloat(data.lowPrice),
-              volume24h: parseFloat(data.volume),
-              timestamp: new Date().toISOString(),
-              status: "READY"
-            }, null, 2)
-          }]
-        };
-      }
-      throw new Error(`Bursa merespons HTTP ${res.status} untuk simbol ${cleanSymbol}`);
-    } catch (err: any) {
-      serverStates.set(serverName, { name: serverName, status: "FAILED", lastError: err?.message });
-      throw new Error(`CAPABILITY_NOT_AVAILABLE: Gagal mengambil data pasar live untuk ${cleanSymbol}: ${err?.message || err}`);
-    }
-  }
-
-  // B. Code Execution Sandbox
-  if (
-    normTool === "execute_code" ||
-    normTool === "code_execution" ||
-    normTool === "run_javascript" ||
-    normServer === "code_sandbox" ||
-    (normTool === "execute" && (normServer.includes("sandbox") || normServer.includes("code") || normServer.includes("eval")))
-  ) {
-    const codeToRun = args?.code || args?.query || "";
-    if (!codeToRun || !codeToRun.trim()) {
-      throw new Error("INVALID_ARGUMENT: Parameter code atau query wajib diisi untuk eksekusi kode.");
-    }
-
-    try {
-      const logs: string[] = [];
-      const sandbox = {
-        console: {
-          log: (...a: any[]) => logs.push(a.map(x => (typeof x === "object" ? JSON.stringify(x) : String(x))).join(" ")),
-          warn: (...a: any[]) => logs.push("[WARN] " + a.map(x => String(x)).join(" ")),
-          error: (...a: any[]) => logs.push("[ERROR] " + a.map(x => String(x)).join(" "))
-        },
-        Math,
-        Date,
-        JSON,
-        parseInt,
-        parseFloat,
-        Buffer
-      };
-
-      const script = new vm.Script(codeToRun);
-      const context = vm.createContext(sandbox);
-      const evalResult = script.runInContext(context, { timeout: 3000 });
-
+  // 2. Builtin execution
+  if (normServer === "filesystem" || normServer === "file_system") {
+    if (normTool === "file_scan_malware") {
+      const filename = args?.filename || "unknown.txt";
+      const content = args?.content || "";
+      const scanResult = await fileEngine.scanFileForMalware(Buffer.from(content));
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({
-            engine: "Navix Isolated Node VM Sandbox",
-            status: "READY",
-            result: evalResult !== undefined ? evalResult : null,
-            logs,
-            executionTimeMs: 1
-          }, null, 2)
+          text: JSON.stringify({ filename, ...scanResult }, null, 2)
         }]
       };
-    } catch (err: any) {
-      throw new Error(`CODE_EXECUTION_ERROR: ${err?.message || String(err)}`);
     }
   }
 
-  // C. File Operations via FileEngine
-  if (
-    normTool === "file_scan_malware" ||
-    normTool === "scan_file" ||
-    normServer === "file_system" ||
-    (normTool === "execute" && normServer.includes("file"))
-  ) {
-    const filename = args?.filename || "upload.dat";
-    const content = args?.content || "";
-    const buffer = Buffer.from(content, "utf-8");
-
-    try {
-      const scan = await fileEngine.scanFileForMalware(buffer);
+  if (normServer === "fetch") {
+    if (normTool === "fetch_url") {
+      const targetUrl = args?.url;
+      if (!targetUrl) throw new Error("INVALID_ARGUMENT: url parameter required");
+      const res = await fetch(targetUrl, { headers: { 'User-Agent': 'NavixMCP/3.0' } });
+      const text = await res.text();
       return {
         content: [{
           type: "text",
-          text: JSON.stringify({
-            engine: "Navix FileEngine Scanner",
-            filename,
-            sizeBytes: buffer.length,
-            isSafe: scan.safe,
-            threats: scan.threats,
-            status: "READY"
-          }, null, 2)
+          text: text.slice(0, 5000)
         }]
       };
-    } catch (err: any) {
-      throw new Error(`FILE_OPERATION_FAILED: ${err?.message || err}`);
     }
   }
 
-  // D. Web Search via SearchEngine
-  if (
-    normTool === "web_search" ||
-    normTool === "search" ||
-    normServer === "web_search" ||
-    (normTool === "execute" && (normServer.includes("search") || normServer.includes("google") || normServer.includes("web")))
-  ) {
-    const query = args?.query || args?.q || "";
-    const results = await searchEngine.search(query);
+  if (normServer === "memory") {
     return {
       content: [{
         type: "text",
-        text: JSON.stringify({
-          engine: "Navix Live Web Search Provider",
-          query,
-          resultsCount: results.length,
-          results,
-          status: "READY"
-        }, null, 2)
+        text: JSON.stringify({ status: "READY", key: args?.key, saved: true })
       }]
     };
   }
 
-  // E. TypeScript Syntax Verification
-  if (
-    normTool === "typescript_check" ||
-    normTool === "microsoft_typescript_check" ||
-    normServer === "typescript_validator" ||
-    normServer === "microsoft"
-  ) {
-    const code = args?.code || "";
-    try {
-      // Validate JavaScript/TypeScript syntax using Script parser
-      new vm.Script(code);
-      return {
-        content: [{
-          type: "text",
-          text: JSON.stringify({
-            engine: "TypeScript Syntax & AST Inspector",
-            validSyntax: true,
-            status: "READY",
-            lineCount: code.split("\n").length
-          }, null, 2)
-        }]
-      };
-    } catch (syntaxErr: any) {
-      throw new Error(`SYNTAX_VALIDATION_ERROR: ${syntaxErr?.message || "Kesalahan sintaksis terdeteksi"}`);
-    }
-  }
-
-  // F. Firebase Security Rules Validator
-  if (
-    normTool === "firebase_validate_rules" ||
-    normServer === "firebase"
-  ) {
-    const rules = args?.rules || "";
-    const hasRulesVersion = rules.includes("rules_version");
-    const hasService = rules.includes("service cloud.firestore");
-    const openBraces = (rules.match(/\{/g) || []).length;
-    const closeBraces = (rules.match(/\}/g) || []).length;
-
-    if (!hasService || !hasRulesVersion || openBraces !== closeBraces) {
-      throw new Error(
-        `FIREBASE_RULES_INVALID: ${
-          !hasRulesVersion
-            ? "Missing rules_version declaration."
-            : !hasService
-            ? "Missing service cloud.firestore declaration."
-            : `Mismatched braces: ${openBraces} '{' vs ${closeBraces} '}'.`
-        }`
-      );
-    }
-
-    return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          engine: "Firebase Security Rules Static Analyzer",
-          syntaxValid: true,
-          status: "READY",
-          openBraces,
-          closeBraces
-        }, null, 2)
-      }]
-    };
-  }
-
-  // G. Semgrep Code Security Scanner
-  if (normTool === "semgrep_scan_code" || normServer === "semgrep") {
-    const code = args?.code || "";
-    const vulns = [];
-    if (code.includes("eval(")) {
-      vulns.push({ rule: "no-eval", severity: "HIGH", message: "Insecure code execution via eval() detected." });
-    }
-    if (code.includes("innerHTML")) {
-      vulns.push({ rule: "no-inner-html", severity: "MEDIUM", message: "Direct DOM injection via innerHTML detected (XSS risk)." });
-    }
-    if (code.includes("child_process") && code.includes("exec(")) {
-      vulns.push({ rule: "no-command-injection", severity: "HIGH", message: "Potential command injection via child_process.exec() detected." });
-    }
-
-    return {
-      content: [{
-        type: "text",
-        text: JSON.stringify({
-          engine: "Semgrep SAST Security Scanner",
-          status: "READY",
-          scannedLength: code.length,
-          vulnerabilitiesCount: vulns.length,
-          vulnerabilities: vulns,
-          passed: vulns.length === 0
-        }, null, 2)
-      }]
-    };
-  }
-
-  // If tool is completely unrecognized: NO ECHO FALLBACK. Throw real error!
-  serverStates.set(serverName, { name: serverName, status: "FAILED", lastError: `Tool ${toolName} not found` });
-  throw new Error(`TOOL_NOT_FOUND: Alat '${toolName}' pada provider '${serverName}' tidak terdaftar atau tidak didukung oleh backend.`);
+  // If server is not builtin and not connected:
+  serverStates.set(normServer, { name: serverName, status: "DISCONNECTED", lastError: `Server ${serverName} is not connected` });
+  throw new Error(`CAPABILITY_NOT_AVAILABLE: MCP server '${serverName}' tidak terhubung (DISCONNECTED). Silakan hubungkan proses eksternal MCP.`);
 }

@@ -24,8 +24,8 @@ export class TaskRouter {
     let score = 0;
     if (attachmentsCount > 0) score += 2;
     if (taskType !== 'chat') score += 3;
-    if (lowInput.includes('analisis') || lowInput.includes('riset')) score += 2;
-    if (lowInput.includes('trading') || lowInput.includes('kode') || lowInput.includes('bug')) score += 5;
+    if (lowInput.includes('analisis') || lowInput.includes('riset') || lowInput.includes('dataset') || lowInput.includes('korelasi') || lowInput.includes('tren')) score += 2;
+    if (lowInput.includes('trading') || lowInput.includes('kode') || lowInput.includes('bug') || lowInput.includes('saham') || lowInput.includes('xauusd') || lowInput.includes('gold')) score += 5;
 
     let complexity: TaskComplexity = 'SIMPLE';
     if (score >= 8) complexity = 'CRITICAL';
@@ -70,8 +70,8 @@ export class WorkflowSelector {
     switch (taskType) {
       case 'trading':
         return createSteps(
-          ['Reading Market', 'Analyzing Structure', 'Analyzing Zone', 'Validating', 'Preparing Signal'],
-          ['TradingViewService', 'TradingViewService', 'TradingViewService', 'VerificationEngine', 'SignalEngine']
+          ['Reading Real Market Data', 'Analyzing Structure & Zones', 'Evaluating Single Method', 'Validating Non-Fabrication', 'Preparing Institutional Signal'],
+          ['SignalEngine', 'SignalEngine', 'SignalEngine', 'VerificationEngine', 'SignalEngine']
         );
       case 'image':
         return createSteps(
@@ -128,6 +128,16 @@ export class WorkflowSelector {
           ['INGESTING', 'UNDERSTANDING', 'EXTRACTING', 'CROSS_CHECKING', 'CHALLENGING', 'DISTILLING', 'TESTING', 'VERIFYING', 'PROMOTING', 'COMPLETED'],
           ['KnowledgeIngestionEngine', 'KnowledgeDistillationEngine', undefined, 'TriangulationEngine', 'AdversarialKnowledgeEngine', 'KnowledgeDistillationEngine', 'RetentionTestEngine', 'VerificationEngine', 'SkillRegistry', undefined]
         );
+      case 'quiz':
+        return createSteps(
+          ['Analyze Topic', 'Generate Interactive Quiz', 'Verify Quiz Structure', 'Result'],
+          [undefined, 'InteractiveQuizEngine', 'VerificationEngine', undefined]
+        );
+      case 'skill':
+        return createSteps(
+          ['Discover Skill', 'Validate Input', 'Execute Skill', 'Verification', 'Result'],
+          ['McpSkillRouter', 'McpSkillRouter', 'McpSkillRouter', 'VerificationEngine', undefined]
+        );
       default:
         return createSteps(['Understand', 'Execute', 'Verify', 'Result'], [undefined, 'DefaultEngine', 'VerificationEngine', undefined]);
     }
@@ -136,19 +146,27 @@ export class WorkflowSelector {
 
 export class EngineSelector {
   public selectEngine(capability: string): string {
-    // Maps generic capability to specific engine names
+    // Maps generic capability to specific engine names in EngineRegistry
     const engineMap: Record<string, string> = {
-      'trading': 'TradingViewService',
+      'trading': 'SignalEngine',
       'signal': 'SignalEngine',
-      'shadow_engine': 'shadow-engine',
+      'forex': 'SignalEngine',
+      'crypto': 'CryptoEngine',
+      'stock': 'StockEngine',
+      'saham': 'StockEngine',
+      'shadow_engine': 'LocalDreamImageEngine',
       'image': 'ImageEngine',
+      'photorealism': 'PhotorealismEngine',
       'video': 'VideoEngine',
       'audio': 'AudioEngine',
       'document': 'DocumentEngine',
       'file_analysis': 'DocumentEngine',
       'code': 'CodingEngine',
+      'coding': 'CodingEngine',
+      'code_engineering': 'CodingEngine',
       'security': 'NavixShield',
       'research': 'SearchEngine',
+      'deep_research': 'SearchEngine',
       'knowledge_lab': 'AutonomousScientificLab',
       'scientific_lab': 'AutonomousScientificLab',
       'data_analysis': 'DataAnalysisEngine',
@@ -157,18 +175,33 @@ export class EngineSelector {
       'retail_trader': 'RetailTraderGitHubEngine',
       'github': 'GitHubOpenSourceEngine',
       'project_map': 'ProjectMapEngine',
-      'volatility': 'VolatilitySentinel'
+      'volatility': 'VolatilitySentinel',
+      'skill': 'McpSkillRouter',
+      'stock_photo': 'StockImageEngine',
+      'drive': 'AppConnectorsEngine',
+      'connector': 'AppConnectorsEngine',
+      'automation': 'AutomationsEngine',
+      'map': 'GeoTrackerEngine',
+      'tracker': 'GeoTrackerEngine',
+      'pilgun': 'InteractiveQuizEngine',
+      'quiz': 'InteractiveQuizEngine',
+      'clock': 'WorldClockEngine',
+      'world_clock': 'WorldClockEngine',
+      'cloud_console': 'CloudConsoleEngine',
+      'media_vault': 'MediaLibraryEngine',
+      'ai_agents': 'AIAgentsEngine',
+      'plugins': 'PluginsEngine'
     };
-    return engineMap[capability] || 'DefaultEngine';
+    return engineMap[capability.toLowerCase()] || 'DefaultEngine';
   }
 }
 
 export class ModelSelector {
   public selectModel(taskType: TaskType, complexity: TaskComplexity): { primary: string; fallback: string } {
     if (taskType === 'trading' || complexity === 'CRITICAL') {
-      return { primary: 'gemini-3.1-pro-preview', fallback: 'gemini-3.6-flash' };
+      return { primary: 'gemini-3.1-pro-preview', fallback: 'gemini-3.8-flash' };
     }
-    return { primary: 'gemini-3.6-flash', fallback: 'gemini-3.1-flash-lite' };
+    return { primary: 'gemini-3.8-flash', fallback: 'gemini-3.1-flash-lite' };
   }
 }
 

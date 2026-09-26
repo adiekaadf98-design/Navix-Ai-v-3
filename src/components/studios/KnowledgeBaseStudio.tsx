@@ -15,6 +15,7 @@ import {
   Send
 } from 'lucide-react';
 import { showToast } from '../../utils/toast';
+import { globalEngineRegistry } from '../../services/EngineRegistry';
 
 interface KnowledgeBaseStudioProps {
   onOpenSidebar: () => void;
@@ -73,29 +74,35 @@ export const KnowledgeBaseStudio: React.FC<KnowledgeBaseStudioProps> = ({ onOpen
     localStorage.setItem('navix_kb_collections', JSON.stringify(collections));
   }, [collections]);
 
-  const handleSemanticSearch = (e: React.FormEvent) => {
+  const handleSemanticSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
 
     setIsSearching(true);
-    setTimeout(() => {
-      setSearchResults([
-        {
-          title: 'Order Block Mitigation Rules v4.2',
-          collection: 'Financial Trading Playbook SMC & Liquidity',
-          score: '0.942 Similarity',
-          snippet: 'Mitigasi Order Block pada zona Fair Value Gap (FVG) valid apabila terjadi break of structure (BOS) disertai volume lonjakan institutional...'
-        },
-        {
-          title: 'Liquidity Sweep Entry Confirmation',
-          collection: 'Financial Trading Playbook SMC & Liquidity',
-          score: '0.918 Similarity',
-          snippet: 'Sweep pada Asian session high/low memberikan konfirmasi entry pembalikan tren (ChoCh) pada timeframe M5 dengan stoploss di atas level wick...'
+    try {
+      const engine = globalEngineRegistry.getEngine('KnowledgeBaseEngine');
+      if (engine) {
+        const res = await engine.execute({ query: searchQuery });
+        if (res.data && res.data.results) {
+          setSearchResults(res.data.results.map((r: any) => ({
+            title: r.docTitle,
+            collection: r.category === 'trading' ? 'Financial Trading Playbook SMC & Liquidity' : 'General Workspace Knowledge Base',
+            score: `${r.score}% Similarity`,
+            snippet: r.text
+          })));
+          showToast(res.message || 'Pencarian semantik Knowledge Base selesai!', 'success');
+        } else {
+          setSearchResults([]);
+          showToast('Tidak ada dokumen yang cocok.', 'info');
         }
-      ]);
+      } else {
+        setSearchResults([]);
+      }
+    } catch (err: any) {
+      showToast('Gagal mencari di Knowledge Base: ' + (err?.message || 'Error'), 'error');
+    } finally {
       setIsSearching(false);
-      showToast('Pencarian semantik RAG selesai!', 'success');
-    }, 600);
+    }
   };
 
   const handleAddCollection = () => {
@@ -255,7 +262,18 @@ export const KnowledgeBaseStudio: React.FC<KnowledgeBaseStudioProps> = ({ onOpen
 
                 <div className="flex items-center justify-between text-[10px] text-neutral-500 font-mono pt-1 border-t border-neutral-800/60">
                   <span>Model: {col.model}</span>
-                  <span>{col.date}</span>
+                  <div className="flex items-center gap-2">
+                    <span>{col.date}</span>
+                    {onSendToChat && (
+                      <button
+                        onClick={() => onSendToChat(`Jadikan koleksi Knowledge Base '${col.title}' sebagai referensi utama dalam analisis ini.`)}
+                        className="p-1 rounded text-neutral-400 hover:text-amber-400 hover:bg-neutral-800 transition cursor-pointer"
+                        title="Gunakan di Chat Utama"
+                      >
+                        <Send size={12} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

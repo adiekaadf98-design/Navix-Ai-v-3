@@ -8,6 +8,7 @@ interface AuthState {
   error: string | null;
   login: (email: string, pass: string) => Promise<boolean>;
   loginOAuth: (provider: 'google' | 'github' | 'apple') => Promise<boolean>;
+  loginInstant: (email?: string, name?: string, provider?: string) => Promise<boolean>;
   loginDemo: () => Promise<void>;
   loginDeveloper: () => Promise<boolean>;
   logout: () => void;
@@ -34,6 +35,22 @@ export const useAuthStore = create<AuthState>((set) => ({
       return true;
     }
     set({ isLoading: false, error: res.error || 'Gagal masuk. Periksa email dan password.' });
+    return false;
+  },
+
+  loginInstant: async (email = 'adiekaadf98@gmail.com', name, provider = 'google') => {
+    set({ isLoading: true, error: null });
+    const res = await AuthService.loginInstant(email, name, provider);
+    if (res.success && res.user) {
+      set({
+        user: res.user,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null
+      });
+      return true;
+    }
+    set({ isLoading: false, error: res.error || 'Gagal login instan.' });
     return false;
   },
 

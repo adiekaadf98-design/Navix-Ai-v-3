@@ -1,6 +1,11 @@
 import { McpSkillAdapter } from './McpSkillAdapter';
 import { NavixValidator } from './NavixValidator';
 
+const getBaseApiUrl = (): string => {
+  if (typeof window !== 'undefined') return '';
+  return (typeof process !== 'undefined' && process.env?.NAVIX_INTERNAL_BASE_URL) || 'http://127.0.0.1:3000';
+};
+
 export class McpSkillExecutor {
   static async execute(skillName: string, args: any): Promise<any> {
     try {
@@ -11,8 +16,11 @@ export class McpSkillExecutor {
         if (token) {
           headers['Authorization'] = `Bearer ${token}`;
         }
+      } else if (typeof process !== 'undefined') {
+        headers['x-navix-internal'] = process.env.NAVIX_INTERNAL_SECRET || process.env.JWT_SECRET || 'navix_default_secret_key_change_in_production';
       }
-      const res = await fetch(`/api/mcp/execute`, {
+      const baseUrl = getBaseApiUrl();
+      const res = await fetch(`${baseUrl}/api/mcp/execute`, {
         method: 'POST',
         headers,
         body: JSON.stringify(payload)
