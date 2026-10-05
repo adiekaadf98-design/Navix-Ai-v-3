@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Mail, ChevronLeft, Loader2, Shield } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 interface ForgotPasswordProps {
   onBack?: () => void;

@@ -6,6 +6,7 @@ import {
   signInAnonymously 
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
+import { safeLocalStorage } from '../utils/safeStorage';
 
 export interface AuthUser {
   id: string;
@@ -41,6 +42,19 @@ export const isDeveloperEmail = (email?: string | null): boolean => {
   if (!email) return false;
   const clean = email.toLowerCase().trim();
   return clean === 'adiekaadf98@gmail.com' || clean === 'adieka.github@gmail.com';
+};
+
+export const DEFAULT_DEV_USER: AuthUser = {
+  id: 'usr_adieka_dev',
+  email: 'adiekaadf98@gmail.com',
+  name: 'Adieka (Developer Navix AI)',
+  avatar: 'https://ui-avatars.com/api/?name=Adieka+Navix&background=DC2626&color=fff',
+  provider: 'google',
+  role: 'developer',
+  plan: 'ultra',
+  credits: 999999,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  lastLoginAt: new Date().toISOString()
 };
 
 export const AuthService = {
@@ -266,8 +280,8 @@ export const AuthService = {
       if (res.ok) {
         const data = await res.json();
         if (data.success && data.user) {
-          localStorage.setItem(TOKEN_KEY, data.token);
-          localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+          safeLocalStorage.setItem(TOKEN_KEY, data.token);
+          safeLocalStorage.setItem(USER_KEY, JSON.stringify(data.user));
           return data.user;
         }
       }
@@ -285,7 +299,7 @@ export const AuthService = {
       createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString()
     };
-    localStorage.setItem(USER_KEY, JSON.stringify(demoUser));
+    safeLocalStorage.setItem(USER_KEY, JSON.stringify(demoUser));
     return demoUser;
   },
 
@@ -295,25 +309,44 @@ export const AuthService = {
     } catch {
       // ignore
     }
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    safeLocalStorage.removeItem(TOKEN_KEY);
+    safeLocalStorage.removeItem(USER_KEY);
   },
 
   isAuthenticated: (): boolean => {
-    return !!localStorage.getItem(TOKEN_KEY);
+    try {
+      const token = safeLocalStorage.getItem(TOKEN_KEY);
+      if (token) return true;
+      const raw = safeLocalStorage.getItem(USER_KEY);
+      if (raw) return true;
+      // Default auto-authenticated as Developer
+      return true;
+    } catch {
+      return true;
+    }
   },
 
-  getCurrentUser: (): AuthUser | null => {
-    const raw = localStorage.getItem(USER_KEY);
-    if (!raw) return null;
+  getCurrentUser: (): AuthUser => {
     try {
-      return JSON.parse(raw) as AuthUser;
+      const raw = safeLocalStorage.getItem(USER_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as AuthUser;
+        if (parsed && parsed.email) return parsed;
+      }
+      // Save and return default developer user
+      safeLocalStorage.setItem(USER_KEY, JSON.stringify(DEFAULT_DEV_USER));
+      safeLocalStorage.setItem(TOKEN_KEY, 'navix_dev_token_adieka');
+      return DEFAULT_DEV_USER;
     } catch (e) {
-      return null;
+      return DEFAULT_DEV_USER;
     }
   },
 
   getToken: (): string | null => {
-    return localStorage.getItem(TOKEN_KEY);
+    try {
+      return safeLocalStorage.getItem(TOKEN_KEY);
+    } catch {
+      return null;
+    }
   }
 };

@@ -17,6 +17,8 @@
     overflow: hidden;
     margin: 0;
     padding: 0;
+    background-color: #0a0a0a;
+    color: #ffffff;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior: none;
   }
@@ -32,6 +34,8 @@
     flex-direction: column;
     overflow: hidden;
     position: relative;
+    background-color: #0a0a0a;
+    color: #ffffff;
   }
   
   /* Prevent horizontal scroll leakage on mobile for code, tables, images */

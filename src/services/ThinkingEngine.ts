@@ -16,7 +16,8 @@ export type TaskType =
   | "memory"
   | "knowledge_lab"
   | "quiz"
-  | "skill";
+  | "skill"
+  | "math";
 
 export type Complexity = "simple" | "normal" | "hard" | "critical";
 
@@ -108,6 +109,7 @@ export function classifyTask(input: string): {
 
   // 1. Explicit tags from Chat Input (+)
   if (text.includes("@trading")) return { taskType: "trading", complexity: "critical" };
+  if (text.includes("@math") || text.includes("@kalkulator")) return { taskType: "math", complexity: "normal" };
   if (text.includes("@image") || text.includes("@stok_foto")) return { taskType: "image", complexity: "normal" };
   if (text.includes("@video")) return { taskType: "video", complexity: "hard" };
   if (text.includes("@audio")) return { taskType: "audio", complexity: "hard" };
@@ -201,6 +203,15 @@ export function classifyTask(input: string): {
     return { taskType: "memory", complexity: "normal" };
   }
 
+  // Math / Numerical Computation (Deterministic 50-digit high precision)
+  const isSingleInteger = /^\s*-?\d+\s*$/.test(text);
+  const isPureArithmetic = /^[\d\s\+\-\*\/\^\(\)\.%,sqrt|sin|cos|tan|log|pi|e|phi|abs|pow|exp]+$/i.test(text) && /\d/.test(text);
+  const hasMathKeywords = /(?:hitung|kalkulasi|akar kuadrat|aritmatika|faktorial|matematika|persen|pangkat|berapa hasil)\b/i.test(text);
+
+  if (isSingleInteger || isPureArithmetic || hasMathKeywords) {
+    return { taskType: "math", complexity: isSingleInteger ? "simple" : "normal" };
+  }
+
   return { taskType: "chat", complexity: "simple" };
 }
 
@@ -280,6 +291,14 @@ export function createTaskPlan(
           "Final Sinyal & Rekomendasi Disiplin"
         ];
         break;
+      case "math":
+        selectedSteps = [
+          "Dekonstruksi Notasi & Formula Matematika",
+          "Komputasi Deterministik 50 Digit Signifikan",
+          "Verifikasi Invariant Rasional & Desimal",
+          "Penyajian Bukti & Hasil Eksak"
+        ];
+        break;
       default:
         selectedSteps = [
           "Pemahaman Konteks & Intent Pengguna",
@@ -319,6 +338,16 @@ export function createTaskPlan(
           "Key Support & Resistance Validation",
           "Risk/Reward & SL/TP Invariant Setup",
           "Audit Sinyal Terverifikasi & Rekomendasi Disiplin"
+        ];
+        break;
+      case "math":
+        selectedSteps = [
+          "Sidang Dewan Diskusi (Audit Formula & Definisi Operasi)",
+          "Mesin Matematika Deterministik 50-Digit Navix AI",
+          "Analisis Sifat Bilangan & Teori Angka (Miller-Rabin / Faktorisasi)",
+          "Verifikasi Presisi Tinggi & Invariant Eksak",
+          "Audit Kesalahan Pembulatan & Konsistensi Logika",
+          "Penyajian Hasil Terbukti Bebas Halusinasi"
         ];
         break;
       default:
@@ -441,6 +470,38 @@ export interface VerificationResult {
   safety: number;
   total: number;
   status: "pass" | "revise" | "fail";
+}
+
+export interface TreeOfThoughtBranch {
+  branchId: string;
+  hypothesis: string;
+  premises: string[];
+  evidenceWeight: number; // 0..100
+  potentialFlaws: string[];
+  isPruned: boolean;
+  score: number;
+}
+
+export function evaluateAndPruneBranches(branches: TreeOfThoughtBranch[]): {
+  activeBranches: TreeOfThoughtBranch[];
+  prunedBranches: TreeOfThoughtBranch[];
+  winningBranch: TreeOfThoughtBranch | null;
+} {
+  const scored = branches.map(b => {
+    const flawPenalty = b.potentialFlaws.length * 15;
+    const computedScore = Math.max(0, Math.min(100, b.evidenceWeight - flawPenalty));
+    return {
+      ...b,
+      score: computedScore,
+      isPruned: computedScore < 50 || b.potentialFlaws.length >= 3
+    };
+  });
+
+  const activeBranches = scored.filter(b => !b.isPruned).sort((a, b) => b.score - a.score);
+  const prunedBranches = scored.filter(b => b.isPruned);
+  const winningBranch = activeBranches.length > 0 ? activeBranches[0] : (scored[0] || null);
+
+  return { activeBranches, prunedBranches, winningBranch };
 }
 
 export function scoreVerification(v: Omit<VerificationResult, "total" | "status">) {

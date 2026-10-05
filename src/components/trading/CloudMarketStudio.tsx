@@ -107,7 +107,7 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
   }, [isLoadingCandles, marketError, candles.length]);
 
   const selectedTicker = useMemo(() => {
-    return tickers.find(t => t.symbol === selectedSymbol) || tickers[0];
+    return tickers.find(t => t.symbol === selectedSymbol) || tickers[0] || INITIAL_MARKET_TICKERS[0];
   }, [tickers, selectedSymbol]);
 
   // Derived Indicators & Zones
@@ -151,7 +151,9 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
       if (data && data.length > 0) {
         setCandles(data);
         const last = data[data.length - 1];
-        setLivePrice(last.close);
+        if (last && typeof last.close === 'number') {
+          setLivePrice(last.close);
+        }
         setMarketError(null);
       } else {
         setMarketError('DATA_UNAVAILABLE: Tidak ada data candle valid dari provider pasar.');
@@ -175,7 +177,7 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
     let isSubscribed = true;
 
     const normTf = CloudMarketEngine.normalizeTimeframe(selectedTimeframe);
-    const isCrypto = selectedTicker.category !== 'Komoditas' && selectedTicker.category !== 'Forex';
+    const isCrypto = selectedTicker?.category !== 'Komoditas' && selectedTicker?.category !== 'Forex';
     const cleanSym = selectedSymbol.toLowerCase();
 
     // Check if WebSocket is viable for real-time crypto kline streaming
@@ -203,9 +205,10 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
 
               setLivePrice(tickPrice);
               setCandles(prev => {
-                if (prev.length === 0) return prev;
+                if (!prev || prev.length === 0) return prev;
                 const lastIdx = prev.length - 1;
                 const lastCandle = prev[lastIdx];
+                if (!lastCandle) return prev;
 
                 if (lastCandle.time === startTime) {
                   const updated = [...prev];
@@ -258,13 +261,15 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
         const price = await CloudMarketEngine.fetchLivePrice(selectedSymbol);
         if (price === null || !isSubscribed) return;
 
-        const newPrice = parseFloat(price.toFixed(selectedTicker.decimals));
+        const decimals = selectedTicker?.decimals ?? 2;
+        const newPrice = parseFloat(price.toFixed(decimals));
         setLivePrice(newPrice);
 
         setCandles(prev => {
-          if (prev.length === 0) return prev;
+          if (!prev || prev.length === 0) return prev;
           const lastIdx = prev.length - 1;
-          const lastCandle = { ...prev[lastIdx] };
+          const lastCandle = prev[lastIdx] ? { ...prev[lastIdx] } : null;
+          if (!lastCandle) return prev;
 
           const tfDuration = CloudMarketEngine.getTimeframeDurationMs(selectedTimeframe);
           const now = Date.now();
@@ -301,13 +306,14 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
     const microTickInterval = setInterval(() => {
       if (!isSubscribed) return;
       setCandles(prev => {
-        if (prev.length === 0) return prev;
+        if (!prev || prev.length === 0) return prev;
         const lastIdx = prev.length - 1;
-        const lastCandle = { ...prev[lastIdx] };
+        const lastCandle = prev[lastIdx] ? { ...prev[lastIdx] } : null;
+        if (!lastCandle) return prev;
         const currentClose = lastCandle.close;
-        if (!currentClose || currentClose <= 0) return prev;
+        if (typeof currentClose !== 'number' || currentClose <= 0) return prev;
 
-        const dec = selectedTicker.decimals || 2;
+        const dec = selectedTicker?.decimals || 2;
         const minStep = Math.pow(10, -dec);
         const maxDelta = Math.max(minStep, currentClose * 0.00008);
         const randomDir = Math.random() > 0.48 ? 1 : -1;
@@ -330,11 +336,19 @@ export const CloudMarketStudio: React.FC<CloudMarketStudioProps> = ({
 
     return () => {
       isSubscribed = false;
-      if (ws) ws.close();
+      if (ws) {
+        try {
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            ws.close();
+          }
+        } catch {
+          // Safe ignore
+        }
+      }
       if (fallbackInterval) clearInterval(fallbackInterval);
       if (microTickInterval) clearInterval(microTickInterval);
     };
-  }, [selectedSymbol, selectedTimeframe, selectedTicker.category, selectedTicker.decimals]);
+  }, [selectedSymbol, selectedTimeframe, selectedTicker?.category, selectedTicker?.decimals]);
 
   // Periodic multi-asset Tickers sync from native API endpoint
   useEffect(() => {
@@ -440,7 +454,7 @@ Catatan: ${activeResult.caraMasuk}`;
   };
 
   const timeframes = ['m1', 'm5', 'm15', 'm30', 'h1', 'h4', 'd1'];
-  const categories = ['Semua', 'Komoditas', 'Forex', 'Major', 'AI', 'Meme', 'L1/L2'];
+  const categories = ['Semua', 'Komoditas', 'Forex', 'Indeks Global', 'Saham IDX', 'Saham US', 'Major', 'AI', 'Meme', 'L1/L2', 'DeFi'];
   const enginesList: StrategyEngineType[] = ['SMC', 'SNR', 'RBS', 'FIBONACCI', 'CRT'];
 
   return (
@@ -754,6 +768,36 @@ Catatan: ${activeResult.caraMasuk}`;
                 </button>
               );
             })}
+
+            {filteredTickers.length === 0 && searchQuery.trim() !== '' && (
+              <div className="p-3 text-center">
+                <p className="text-[11px] text-neutral-400 mb-2 font-mono">Pair "{searchQuery.toUpperCase()}" dapat dibuka secara real-time.</p>
+                <button
+                  onClick={() => {
+                    const clean = searchQuery.trim().replace(/[\/\-_]/g, '').toUpperCase();
+                    const customItem: MarketTickerItem = {
+                      symbol: clean,
+                      displayName: `${clean} LIVE`,
+                      category: 'Kustom',
+                      price: 100.0,
+                      change24h: 0.0,
+                      high24h: 105.0,
+                      low24h: 95.0,
+                      volume24h: 10000000,
+                      decimals: 2
+                    };
+                    setTickers(prev => [customItem, ...prev]);
+                    setSelectedSymbol(clean);
+                    setSearchQuery('');
+                    showToast(`Membuka chart real-time untuk ${clean}`, 'success');
+                  }}
+                  className="w-full py-1.5 bg-red-600/30 hover:bg-red-600/50 border border-red-500/50 text-red-300 hover:text-white rounded text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Zap size={13} />
+                  Buka Pasangan {searchQuery.toUpperCase()}
+                </button>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -1524,6 +1568,37 @@ Catatan: ${activeResult.caraMasuk}`;
                   </button>
                 );
               })}
+
+              {filteredTickers.length === 0 && searchQuery.trim() !== '' && (
+                <div className="p-4 text-center">
+                  <p className="text-xs text-neutral-400 mb-2 font-mono">Pair "{searchQuery.toUpperCase()}" dapat dibuka langsung di chart real-time.</p>
+                  <button
+                    onClick={() => {
+                      const clean = searchQuery.trim().replace(/[\/\-_]/g, '').toUpperCase();
+                      const customItem: MarketTickerItem = {
+                        symbol: clean,
+                        displayName: `${clean} LIVE`,
+                        category: 'Kustom',
+                        price: 100.0,
+                        change24h: 0.0,
+                        high24h: 105.0,
+                        low24h: 95.0,
+                        volume24h: 10000000,
+                        decimals: 2
+                      };
+                      setTickers(prev => [customItem, ...prev]);
+                      setSelectedSymbol(clean);
+                      setIsWatchlistModalOpen(false);
+                      setSearchQuery('');
+                      showToast(`Membuka chart real-time untuk ${clean}`, 'success');
+                    }}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
+                  >
+                    <Zap size={14} />
+                    Buka Pasangan {searchQuery.toUpperCase()}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

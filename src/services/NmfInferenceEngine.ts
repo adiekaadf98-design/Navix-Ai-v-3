@@ -1,6 +1,3 @@
-import fs from 'fs';
-import path from 'path';
-
 export interface NmfVisualConditioning {
   focalLength: number;
   fStop: number;
@@ -64,16 +61,23 @@ export class NavixMultimediaFoundationInference {
   }
 
   private loadCheckpoint() {
+    if (typeof window !== 'undefined' || typeof process === 'undefined' || !process.cwd) {
+      return;
+    }
     try {
-      const ckptPath = path.join(process.cwd(), 'nmf_engine', 'nmf_adapter_checkpoint_v1.json');
-      if (fs.existsSync(ckptPath)) {
-        const raw = fs.readFileSync(ckptPath, 'utf8');
-        this.checkpoint = JSON.parse(raw);
-        this.isLoaded = true;
-        console.log(`[NMF Engine] Trained checkpoint loaded successfully (Improvement: ${this.checkpoint?.metadata?.improvement_percentage}%)`);
-      }
+      import('path').then(p => {
+        import('fs').then(fs => {
+          const ckptPath = p.join(process.cwd(), 'nmf_engine', 'nmf_adapter_checkpoint_v1.json');
+          if (fs.existsSync(ckptPath)) {
+            const raw = fs.readFileSync(ckptPath, 'utf8');
+            this.checkpoint = JSON.parse(raw);
+            this.isLoaded = true;
+            console.log(`[NMF Engine] Trained checkpoint loaded successfully (Improvement: ${this.checkpoint?.metadata?.improvement_percentage}%)`);
+          }
+        }).catch(() => {});
+      }).catch(() => {});
     } catch (e: any) {
-      console.warn(`[NMF Engine] Failed to load checkpoint:`, e.message);
+      // safe fallback
     }
   }
 

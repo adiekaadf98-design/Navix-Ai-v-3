@@ -7,6 +7,13 @@ export interface ToolCapability {
   requiredInput: string;
 }
 
+export type CapabilityLifecycleStatus = 
+  | 'REGISTERED'        // Engine or tool is cataloged in registry
+  | 'AVAILABLE'         // Engine is present in runtime environment
+  | 'EXECUTABLE'        // Engine health check PASS and ready for execution
+  | 'VERIFIED'          // Output passed VerificationEngine gate
+  | 'USER_DELIVERABLE'; // Sanitized and grounded for user delivery
+
 export interface EngineCandidateEvaluation {
   engineName: string;
   type: 'NAVIX_CORE' | 'OPEN_SOURCE_GITHUB';
@@ -38,6 +45,7 @@ export class ToolSelector {
     { name: 'VideoGenerator', description: 'Generate video motion scenes and storyboards', requiredInput: 'prompt' },
     { name: 'AudioSynthesizer', description: 'Studio-grade audio processing, voice, and harmonic synthesis', requiredInput: 'query' },
     { name: 'DocumentParser', description: 'Extract semantic structures, tables, and claims from documents', requiredInput: 'document_text' },
+    { name: 'MathCalculator', description: 'Deterministic 50-digit high-precision mathematical expression evaluator and integer analyzer', requiredInput: 'expression' },
     { name: 'DataAnalyticsCalculator', description: 'Deterministic statistical and numerical aggregations', requiredInput: 'dataset' },
     { name: 'SecurityShieldAuditor', description: 'Zero-trust sanitization and vulnerability inspection', requiredInput: 'payload' },
     { name: 'GitHubOpenSourceScanner', description: 'Audit 50,000+ open-source GitHub skills, repositories, and licenses', requiredInput: 'query' }
@@ -64,12 +72,49 @@ export class ToolSelector {
         { name: 'SearXNGResearchEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'searxng/searxng', license: 'AGPL-3.0 / MIT wrapper' },
         { name: 'Crawl4AiScraperEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'unclecode/crawl4ai, cheeriojs/cheerio', license: 'Apache-2.0 / MIT' }
       ],
+      'search': [
+        { name: 'SearchEngine', type: 'NAVIX_CORE' },
+        { name: 'KnowledgeLab', type: 'NAVIX_CORE' },
+        { name: 'SearXNGResearchEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'searxng/searxng', license: 'AGPL-3.0 / MIT wrapper' },
+        { name: 'Crawl4AiScraperEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'unclecode/crawl4ai, cheeriojs/cheerio', license: 'Apache-2.0 / MIT' }
+      ],
+      'research': [
+        { name: 'SearchEngine', type: 'NAVIX_CORE' },
+        { name: 'KnowledgeLab', type: 'NAVIX_CORE' },
+        { name: 'SearXNGResearchEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'searxng/searxng', license: 'AGPL-3.0 / MIT wrapper' }
+      ],
+      'deep_research': [
+        { name: 'SearchEngine', type: 'NAVIX_CORE' },
+        { name: 'KnowledgeLab', type: 'NAVIX_CORE' }
+      ],
       'trading': [
         { name: 'SignalEngine', type: 'NAVIX_CORE' },
         { name: 'RetailTraderGitHubEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'ccxt/ccxt, ta-lib/ta-lib-python, freqtrade/freqtrade', license: 'MIT / BSD-3-Clause' },
         { name: 'TradingViewService', type: 'NAVIX_CORE' },
         { name: 'CryptoEngine', type: 'NAVIX_CORE' },
         { name: 'StockEngine', type: 'NAVIX_CORE' }
+      ],
+      'market': [
+        { name: 'SignalEngine', type: 'NAVIX_CORE' },
+        { name: 'CryptoEngine', type: 'NAVIX_CORE' },
+        { name: 'StockEngine', type: 'NAVIX_CORE' }
+      ],
+      'crypto': [
+        { name: 'CryptoEngine', type: 'NAVIX_CORE' },
+        { name: 'SignalEngine', type: 'NAVIX_CORE' },
+        { name: 'RetailTraderGitHubEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'ccxt/ccxt', license: 'MIT' }
+      ],
+      'stock': [
+        { name: 'StockEngine', type: 'NAVIX_CORE' },
+        { name: 'SignalEngine', type: 'NAVIX_CORE' },
+        { name: 'RetailTraderGitHubEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'ta-lib/ta-lib-python', license: 'BSD-3-Clause' }
+      ],
+      'saham': [
+        { name: 'StockEngine', type: 'NAVIX_CORE' },
+        { name: 'SignalEngine', type: 'NAVIX_CORE' }
+      ],
+      'macro': [
+        { name: 'ForexFactoryService', type: 'NAVIX_CORE' }
       ],
       'github_opensource': [
         { name: 'GitHubOpenSourceEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'https://github.com', license: 'Open Source / MIT' },
@@ -82,6 +127,11 @@ export class ToolSelector {
         { name: 'GitHubOpenSourceEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'https://github.com', license: 'MIT' },
         { name: 'AIStudioAppBuilderEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'google-gemini/ai-studio-starter', license: 'Apache-2.0' }
       ],
+      'coding': [
+        { name: 'CodingEngine', type: 'NAVIX_CORE' },
+        { name: 'ProjectMapEngine', type: 'NAVIX_CORE' },
+        { name: 'GitHubOpenSourceEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'https://github.com', license: 'MIT' }
+      ],
       'code_engineering': [
         { name: 'CodingEngine', type: 'NAVIX_CORE' },
         { name: 'ProjectMapEngine', type: 'NAVIX_CORE' },
@@ -93,6 +143,13 @@ export class ToolSelector {
         { name: 'MarkitDownParserEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'microsoft/markitdown', license: 'MIT' },
         { name: 'PdfJsExtractionEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'mozilla/pdf.js', license: 'Apache-2.0' }
       ],
+      'pdf': [
+        { name: 'DocumentEngine', type: 'NAVIX_CORE' },
+        { name: 'PdfJsExtractionEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'mozilla/pdf.js', license: 'Apache-2.0' }
+      ],
+      'file_analysis': [
+        { name: 'DocumentEngine', type: 'NAVIX_CORE' }
+      ],
       'data_analysis': [
         { name: 'DataAnalysisEngine', type: 'NAVIX_CORE' },
         { name: 'DanfoDataEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'javascriptdata/danfojs', license: 'MIT' },
@@ -102,6 +159,13 @@ export class ToolSelector {
         { name: 'EpisodicMemoryEngine', type: 'NAVIX_CORE' },
         { name: 'KnowledgeBaseEngine', type: 'NAVIX_CORE' },
         { name: 'ChromaVectorEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'chroma-core/chroma', license: 'Apache-2.0' }
+      ],
+      'memory': [
+        { name: 'EpisodicMemoryEngine', type: 'NAVIX_CORE' }
+      ],
+      'rag': [
+        { name: 'KnowledgeBaseEngine', type: 'NAVIX_CORE' },
+        { name: 'EpisodicMemoryEngine', type: 'NAVIX_CORE' }
       ],
       'image': [
         { name: 'ImageEngine', type: 'NAVIX_CORE' },
@@ -142,6 +206,45 @@ export class ToolSelector {
         { name: 'AgentEngine', type: 'NAVIX_CORE' },
         { name: 'McpSkillRouter', type: 'OPEN_SOURCE_GITHUB', repo: 'modelcontextprotocol/servers', license: 'MIT' }
       ],
+      'agent': [
+        { name: 'AgentEngine', type: 'NAVIX_CORE' },
+        { name: 'AutomationsEngine', type: 'NAVIX_CORE' },
+        { name: 'McpSkillRouter', type: 'OPEN_SOURCE_GITHUB', repo: 'modelcontextprotocol/servers', license: 'MIT' }
+      ],
+      'mcp': [
+        { name: 'McpSkillRouter', type: 'OPEN_SOURCE_GITHUB', repo: 'modelcontextprotocol/servers', license: 'MIT' },
+        { name: 'AgentEngine', type: 'NAVIX_CORE' }
+      ],
+      'skill': [
+        { name: 'McpSkillRouter', type: 'OPEN_SOURCE_GITHUB', repo: 'modelcontextprotocol/servers', license: 'MIT' },
+        { name: 'AgentEngine', type: 'NAVIX_CORE' }
+      ],
+      'pilgun': [
+        { name: 'InteractiveQuizEngine', type: 'NAVIX_CORE' }
+      ],
+      'vision': [
+        { name: 'VisionEngine', type: 'NAVIX_CORE' },
+        { name: 'DocumentEngine', type: 'NAVIX_CORE' }
+      ],
+      'ocr': [
+        { name: 'VisionEngine', type: 'NAVIX_CORE' },
+        { name: 'DocumentEngine', type: 'NAVIX_CORE' }
+      ],
+      'math': [
+        { name: 'MathEngine', type: 'NAVIX_CORE' },
+        { name: 'DataAnalysisEngine', type: 'NAVIX_CORE' },
+        { name: 'AutonomousScientificLab', type: 'NAVIX_CORE' }
+      ],
+      'arithmetic': [
+        { name: 'MathEngine', type: 'NAVIX_CORE' }
+      ],
+      'single_integer': [
+        { name: 'MathEngine', type: 'NAVIX_CORE' }
+      ],
+      'reasoning': [
+        { name: 'AdaptiveReasoningEngine', type: 'NAVIX_CORE' },
+        { name: 'TaskDecompositionEngine', type: 'NAVIX_CORE' }
+      ],
       'quiz': [
         { name: 'InteractiveQuizEngine', type: 'NAVIX_CORE' }
       ],
@@ -149,6 +252,40 @@ export class ToolSelector {
         { name: 'AutonomousScientificLab', type: 'NAVIX_CORE' },
         { name: 'KnowledgeLab', type: 'NAVIX_CORE' },
         { name: 'DocumentEngine', type: 'NAVIX_CORE' }
+      ],
+      'artifact': [
+        { name: 'ArtifactManager', type: 'NAVIX_CORE' },
+        { name: 'ArtifactEngine', type: 'NAVIX_CORE' }
+      ],
+      'artifact_manager': [
+        { name: 'ArtifactManager', type: 'NAVIX_CORE' }
+      ],
+      'evidence_bundle': [
+        { name: 'EvidenceBundleEngine', type: 'NAVIX_CORE' },
+        { name: 'EvidenceEngine', type: 'NAVIX_CORE' }
+      ],
+      'evidence': [
+        { name: 'EvidenceBundleEngine', type: 'NAVIX_CORE' }
+      ],
+      'concurrency': [
+        { name: 'EngineConcurrencyManager', type: 'NAVIX_CORE' },
+        { name: 'PerformanceEngine', type: 'NAVIX_CORE' }
+      ],
+      'performance': [
+        { name: 'EngineConcurrencyManager', type: 'NAVIX_CORE' }
+      ],
+      'browser': [
+        { name: 'ComputerInteractionEngine', type: 'NAVIX_CORE' },
+        { name: 'BrowserEngine', type: 'NAVIX_CORE' }
+      ],
+      'computer_interaction': [
+        { name: 'ComputerInteractionEngine', type: 'NAVIX_CORE' }
+      ],
+      'context': [
+        { name: 'ContextBuilderEngine', type: 'NAVIX_CORE' }
+      ],
+      'context_builder': [
+        { name: 'ContextBuilderEngine', type: 'NAVIX_CORE' }
       ]
     };
 
@@ -301,6 +438,42 @@ export class ToolSelector {
     }
 
     return selected.filter(Boolean);
+  }
+
+  /**
+   * Evaluates the precise lifecycle state of a capability:
+   * REGISTERED != AVAILABLE != EXECUTABLE != VERIFIED != USER_DELIVERABLE
+   * 
+   * Strict Rule:
+   * - FAILED / DISABLED / AUTH_ERROR / TIMEOUT / CAPABILITY_NOT_AVAILABLE must NEVER be called AVAILABLE.
+   * - REGISTERED: Engine/capability tercatat di registry / catalog.
+   * - AVAILABLE: Capability tersedia di environment/runtime dan dependensi dasarnya tersedia.
+   * - EXECUTABLE: Capability AVAILABLE + execution contract dapat dijalankan saat ini (HEALTHY / OPERATIONAL).
+   */
+  public getCapabilityLifecycleStatus(capabilityName: string): CapabilityLifecycleStatus {
+    const engine = globalEngineRegistry.getEngine(capabilityName);
+    if (!engine) {
+      return 'REGISTERED';
+    }
+    const health = globalEngineRegistry.getEngineHealth(capabilityName);
+    const info = globalEngineRegistry.getEngineInfo(capabilityName);
+
+    // Kontrak Ketat: Health failure TIDAK BOLEH dianggap AVAILABLE
+    if (health === 'DISABLED' || health === 'FAILED' || health === 'AUTH_ERROR' || health === 'TIMEOUT' || health === 'CAPABILITY_NOT_AVAILABLE') {
+      return 'REGISTERED';
+    }
+
+    // Available: Tersedia di runtime environment tetapi sedang busy / processing / standby
+    if (health === 'BUSY' || health === 'PROCESSING' || (info && info.lifecycle === 'INITIALIZED')) {
+      return 'AVAILABLE';
+    }
+
+    // Executable: Available + siap menjalankan tugas komputasi saat ini
+    if (health === 'AVAILABLE' || health === 'DEGRADED' || (info && (info.lifecycle === 'EXECUTABLE' || info.lifecycle === 'HEALTHY'))) {
+      return 'EXECUTABLE';
+    }
+
+    return 'REGISTERED';
   }
 }
 

@@ -17,6 +17,7 @@ import { classifyTask, decideEffort, buildToolBudget, createTaskPlan, EffortLeve
 import { firestoreSync } from './services/firestoreSync';
 import { QuotaService } from './services/quotaService';
 import { showToast } from './utils/toast';
+import { safeLocalStorage } from './utils/safeStorage';
 import { ThinkingStateData } from './components/ThinkingIndicator';
 import { ImageStudio } from './components/studios/ImageStudio';
 import { StockImageStudio } from './components/studios/StockImageStudio';
@@ -36,34 +37,46 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 function MainChatApp() {
   const { user } = useAuthStore();
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
-  const [sessions, setSessions] = useState<ChatSession[]>(() => { const saved = localStorage.getItem('navix_chat_sessions'); if (saved) { try { const parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length > 0) return parsed; } catch {} } return [{ id: Date.now().toString(), title: 'Obrolan Baru', messages: [], updatedAt: new Date() }]; });
+  const [sessions, setSessions] = useState<ChatSession[]>(() => { 
+    const saved = safeLocalStorage.getItem('navix_chat_sessions'); 
+    if (saved) { 
+      try { 
+        const parsed = JSON.parse(saved); 
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed; 
+      } catch {} 
+    } 
+    return [{ id: Date.now().toString(), title: 'Obrolan Baru', messages: [], updatedAt: new Date() }]; 
+  });
   const [currentSessionId, setCurrentSessionId] = useState<string>(() => sessions[0]?.id || Date.now().toString());
   const [currentView, setCurrentView] = useState<NavixAppView>('chat');
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 768 : true);
   const [isImagePanelOpen, setIsImagePanelOpen] = useState(false); 
   const [isLoading, setIsLoading] = useState(false); 
   const [voiceEnabled, setVoiceEnabled] = useState(false); 
-  const [selectedModel, setSelectedModel] = useState<string>(() => typeof localStorage !== 'undefined' ? localStorage.getItem('navix_selected_model') || 'gemini-3.8-flash' : 'gemini-3.8-flash'); 
-  const [effortLevel, setEffortLevel] = useState<string>(() => typeof localStorage !== 'undefined' ? localStorage.getItem('navix_effort_level') || 'medium' : 'medium'); 
-  const [thinkingMode, setThinkingMode] = useState<boolean>(() => typeof localStorage !== 'undefined' ? localStorage.getItem('navix_thinking_mode') !== 'false' : true); 
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    const saved = safeLocalStorage.getItem('navix_selected_model');
+    return saved || 'gemini-3.8-flash';
+  }); 
+  const [effortLevel, setEffortLevel] = useState<string>(() => safeLocalStorage.getItem('navix_effort_level') || 'medium'); 
+  const [thinkingMode, setThinkingMode] = useState<boolean>(() => safeLocalStorage.getItem('navix_thinking_mode') !== 'false'); 
   const aiBooster = true; 
   const [thinkingState, setThinkingState] = useState<ThinkingStateData | undefined>();
 
   useEffect(() => {
-    try { localStorage.setItem('navix_selected_model', selectedModel); } catch {}
+    try { safeLocalStorage.setItem('navix_selected_model', selectedModel); } catch {}
   }, [selectedModel]);
 
   useEffect(() => {
-    try { localStorage.setItem('navix_effort_level', effortLevel); } catch {}
+    try { safeLocalStorage.setItem('navix_effort_level', effortLevel); } catch {}
   }, [effortLevel]);
 
   useEffect(() => {
-    try { localStorage.setItem('navix_thinking_mode', String(thinkingMode)); } catch {}
+    try { safeLocalStorage.setItem('navix_thinking_mode', String(thinkingMode)); } catch {}
   }, [thinkingMode]);
 
   const currentSession = sessions.find((s) => s.id === currentSessionId) || sessions[0];
   useEffect(() => { const unsub = firestoreSync.subscribeToSessions((cloudSessions) => { if (cloudSessions?.length) setSessions(cloudSessions); }); firestoreSync.loadAllSessions().then((cloudSessions) => { if (cloudSessions?.length) setSessions(cloudSessions); }).catch(() => {}); return () => unsub?.(); }, []);
-  useEffect(() => { try { localStorage.setItem('navix_chat_sessions', JSON.stringify(sessions.map((s) => ({ ...s, messages: s.messages.slice(-50).map((m) => ({ ...m, attachments: m.attachments?.map((a) => a.data && a.data.length > 500000 ? { ...a, data: undefined } : a) })) })))); } catch {} }, [sessions]);
+  useEffect(() => { try { safeLocalStorage.setItem('navix_chat_sessions', JSON.stringify(sessions.map((s) => ({ ...s, messages: s.messages.slice(-50).map((m) => ({ ...m, attachments: m.attachments?.map((a) => a.data && a.data.length > 500000 ? { ...a, data: undefined } : a) })) })))); } catch {} }, [sessions]);
   const handleNewChat = () => { const next = { id: Date.now().toString(), title: 'Obrolan Baru', messages: [], updatedAt: new Date() }; setSessions((current) => [next, ...current]); setCurrentSessionId(next.id); setCurrentView('chat'); firestoreSync.saveSession(next).catch(() => {}); };
   const handleDeleteSession = (id: string, e: React.MouseEvent) => { e.stopPropagation(); firestoreSync.deleteSession(id).catch(() => {}); setSessions((current) => { const next = current.filter((s) => s.id !== id); if (currentSessionId === id && next[0]) setCurrentSessionId(next[0].id); return next.length ? next : [{ id: Date.now().toString(), title: 'Obrolan Baru', messages: [], updatedAt: new Date() }]; }); };
   const handleRenameSession = (id: string, newTitle: string) => {

@@ -45,11 +45,15 @@ export class TaskComplexityRouter {
       score += 2;
       reasoning.push("Analysis/Research required.");
     }
+    if (lowInput.includes('mendalam') || lowInput.includes('komparatif') || lowInput.includes('komprehensif')) {
+      score += 3;
+      reasoning.push("Deep comparative analysis required.");
+    }
 
     // 5. Risiko kesalahan / verifikasi
-    if (lowInput.includes('trading') || lowInput.includes('saham') || lowInput.includes('crypto') || lowInput.includes('emas') || lowInput.includes('xau') || lowInput.includes('gold')) {
+    if (lowInput.includes('trading') || lowInput.includes('saham') || lowInput.includes('bursa') || lowInput.includes('aset') || lowInput.includes('pasar') || lowInput.includes('crypto') || lowInput.includes('emas') || lowInput.includes('xau') || lowInput.includes('gold')) {
       score += 5;
-      reasoning.push("High risk domain (Trading) detected.");
+      reasoning.push("High risk domain (Trading/Market) detected.");
     }
     
     if (lowInput.includes('kode') || lowInput.includes('bug') || lowInput.includes('error') || lowInput.includes('perbaiki')) {
@@ -236,6 +240,65 @@ export class TaskDecomposer {
         id: 'subtask-3',
         goal: 'Verify Zero-Trust Posture',
         input: 'Security verification',
+        dependencies: ['subtask-2'],
+        assignedEngine: 'VerificationEngine',
+        status: 'PENDING'
+      });
+    } else if (taskType === 'vision' as any || input.toLowerCase().includes('ocr') || input.toLowerCase().includes('baca gambar') || input.toLowerCase().includes('analisis visual')) {
+      subtasks.push({
+        id: 'subtask-2',
+        goal: 'Multimodal Visual Extraction, Chart Reading & OCR',
+        input: input,
+        dependencies: ['subtask-1'],
+        assignedEngine: 'VisionEngine',
+        status: 'PENDING'
+      });
+      subtasks.push({
+        id: 'subtask-3',
+        goal: 'Verify Visual Semantics & Document Grounding',
+        input: 'Visual verification',
+        dependencies: ['subtask-2'],
+        assignedEngine: 'VerificationEngine',
+        status: 'PENDING'
+      });
+    } else if (taskType === 'agent' as any || input.toLowerCase().includes('agen otonom') || input.toLowerCase().includes('agent execution') || input.toLowerCase().includes('autonomous task')) {
+      subtasks.push({
+        id: 'subtask-2',
+        goal: 'Autonomous Plan & Subgoal Decomposition (PLAN)',
+        input: input,
+        dependencies: ['subtask-1'],
+        assignedEngine: 'AgentEngine',
+        status: 'PENDING'
+      });
+      subtasks.push({
+        id: 'subtask-3',
+        goal: 'Execute Subtask Tool Pipeline (EXECUTE)',
+        input: 'Execution pipeline',
+        dependencies: ['subtask-2'],
+        assignedEngine: 'AgentEngine',
+        status: 'PENDING'
+      });
+      subtasks.push({
+        id: 'subtask-4',
+        goal: 'Verify Goal Completion & Non-Hallucination (VERIFY)',
+        input: 'Goal verification',
+        dependencies: ['subtask-3'],
+        assignedEngine: 'VerificationEngine',
+        status: 'PENDING'
+      });
+    } else if (taskType === 'math' as any || input.toLowerCase().includes('hitung') || input.toLowerCase().includes('kalkulasi') || /^\s*-?\d+\s*$/.test(input.trim())) {
+      subtasks.push({
+        id: 'subtask-2',
+        goal: 'High-Precision Deterministic Computation (50 Significant Digits)',
+        input: input,
+        dependencies: ['subtask-1'],
+        assignedEngine: 'MathEngine',
+        status: 'PENDING'
+      });
+      subtasks.push({
+        id: 'subtask-3',
+        goal: 'Mathematical Verification & Source of Truth Audit',
+        input: 'Mathematical verification',
         dependencies: ['subtask-2'],
         assignedEngine: 'VerificationEngine',
         status: 'PENDING'

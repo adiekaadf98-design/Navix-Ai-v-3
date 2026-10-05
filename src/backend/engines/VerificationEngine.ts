@@ -56,7 +56,7 @@ ATURAN OUTPUT:
 - Jika draf sudah sangat baik, akurat, dan memenuhi seluruh standar di atas, kembalikan teks draf TERSEBUT PERSIS KATA PER KATA tanpa komentar pembuka atau penutup.
 - HANYA jika ada kesalahan fatal, halusinasi, klaim hipotesis keliru, kode sepotong malas, atau bug sintaks: lakukan koreksi diri mandiri (Self-Healing Loop) dan kembalikan versi yang telah dibetulkan secara utuh dan tuntas.`;
 
-      const candidateModels = ['gemini-3.1-flash-lite', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.8-flash'];
+      const candidateModels = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-latest'];
       let verifiedText = draft;
       let passed = true;
 

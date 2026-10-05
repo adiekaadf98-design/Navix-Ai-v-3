@@ -263,6 +263,44 @@ export class VolatilitySentinelEngine {
     return [...this.alertsHistory];
   }
 
+  /**
+   * Validates multi-timeframe confluence between Higher Timeframe (HTF) trend and Lower Timeframe (LTF) entry.
+   */
+  public evaluateMultiTimeframeConfluence(
+    htfTrend: 'BULLISH' | 'BEARISH' | 'NEUTRAL',
+    ltfDirection: 'BUY' | 'SELL' | 'NEUTRAL',
+    fvgMitigated: boolean = true,
+    liquiditySwept: boolean = true
+  ): {
+    isConfluent: boolean;
+    confluenceScore: number; // 0..100
+    grade: 'A_PLUS_INSTITUTIONAL' | 'B_STANDARD' | 'C_HIGH_RISK_COUNTER_TREND';
+    reason: string;
+  } {
+    let score = 50;
+    const aligned = (htfTrend === 'BULLISH' && ltfDirection === 'BUY') || (htfTrend === 'BEARISH' && ltfDirection === 'SELL');
+    const directCounter = (htfTrend === 'BULLISH' && ltfDirection === 'SELL') || (htfTrend === 'BEARISH' && ltfDirection === 'BUY');
+
+    if (aligned) score += 25;
+    if (directCounter) score -= 30;
+    if (liquiditySwept) score += 15;
+    if (fvgMitigated) score += 10;
+
+    score = Math.max(10, Math.min(100, score));
+
+    const grade = score >= 85 ? 'A_PLUS_INSTITUTIONAL' : score >= 60 ? 'B_STANDARD' : 'C_HIGH_RISK_COUNTER_TREND';
+    const reason = aligned
+      ? `HTF trend (${htfTrend}) selaras dengan arah entri LTF (${ltfDirection}). ${liquiditySwept ? 'Liquidity sweep terkonfirmasi.' : ''}`
+      : `Peringatan: Entri LTF (${ltfDirection}) melawan tren HTF (${htfTrend}). Disarankan pengetatan Stop Loss.`;
+
+    return {
+      isConfluent: score >= 60,
+      confluenceScore: score,
+      grade,
+      reason
+    };
+  }
+
   public getMetrics(symbol: string): VolatilityMetrics {
     const isBreaker = this.isCircuitBreakerActive(symbol);
     return {
@@ -276,3 +314,4 @@ export class VolatilitySentinelEngine {
 }
 
 export const volatilitySentinel = new VolatilitySentinelEngine();
+

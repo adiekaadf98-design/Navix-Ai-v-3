@@ -13,7 +13,6 @@ import { ScienceCard, ScienceData } from './ScienceCard';
 import { TrackerCard, TrackerData } from './TrackerCard';
 import { ShadowEngineCard, ShadowEngineData } from './ShadowEngineCard';
 import { StudioAppCard, StudioAppBlockData } from './StudioAppCard';
-import { DeliberationCard } from './DeliberationCard';
 
 import { analyzeImageIntent } from '../services/Orchestrator';
 import { ThinkingIndicator, ThinkingStateData } from './ThinkingIndicator';
@@ -211,9 +210,8 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
     const trackerRegex = /```(?:json)?\s*tracker\n([\s\S]*?)```/i;
     const scienceRegex = /```(?:json)?\s*science\n([\s\S]*?)```/i;
     const studioAppRegex = /```(?:json)?\s*(?:studio_app|apk_app|web_app)\n([\s\S]*?)```/i;
-    const deliberationRegex = /```(?:json)?\s*deliberation\n([\s\S]*?)```/i;
     
-    let cleanText = text;
+    let cleanText = text.replace(/```(?:json)?\s*deliberation[\s\S]*?```/ig, '').trim();
     
     const signalsData: SignalData[] = [];
     let mappedSymbol = '';
@@ -354,98 +352,16 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
       }
     }
 
-    const deliberationMatch = cleanText.match(deliberationRegex);
-    let deliberationData = null;
-    if (deliberationMatch) {
-      try {
-        deliberationData = JSON.parse(deliberationMatch[1]);
-        cleanText = cleanText.replace(deliberationRegex, '').trim();
-      } catch (e) {
-        console.error('Failed to parse deliberation data', e);
-      }
-    }
+    // Ensure internal swarm markers are stripped so output remains clean
+    cleanText = cleanText.replace(/\[The (?:Observer|Analyst|Critic|Executor)\]\s*/g, '').trim();
 
-    // Swarm segments definition
-    const swarmTypes = [
-      { key: '[The Observer]', title: 'THE OBSERVER', icon: '📡' },
-      { key: '[The Analyst]', title: 'THE ANALYST', icon: '🔬' },
-      { key: '[The Critic]', title: 'THE CRITIC', icon: '⚖️' },
-      { key: '[The Executor]', title: 'THE EXECUTOR', icon: '⚡' },
-    ];
-
-    // More robust segment parsing
     const renderedText = [] as React.ReactNode[];
-    let blockCounter = 0;
-
-    // Use regex to find all segment headers
-    const segmentHeaderRegex = /\[The (Observer|Analyst|Critic|Executor)\]/g;
-    let match;
-    let lastIndex = 0;
-
-    while ((match = segmentHeaderRegex.exec(cleanText)) !== null) {
-      // Text before segment
-      const preText = cleanText.substring(lastIndex, match.index).trim();
-      if (preText) {
-        renderedText.push(
-          <div key={`text-${blockCounter++}`} className="mb-4">
-            <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{preText}</Markdown>
-          </div>
-        );
-      }
-
-      const segmentKey = match[0];
-      const segmentType = match[1];
-      const segmentInfo = swarmTypes.find(s => s.key === segmentKey);
-
-      // Find where this segment ends (start of next segment)
-      let nextIndex = cleanText.length;
-      const nextMatchRegex = /\[The (Observer|Analyst|Critic|Executor)\]/g;
-      nextMatchRegex.lastIndex = segmentHeaderRegex.lastIndex;
-      const nextMatch = nextMatchRegex.exec(cleanText);
-      if (nextMatch) {
-        nextIndex = nextMatch.index;
-      }
-
-      const segmentContent = cleanText.substring(segmentHeaderRegex.lastIndex, nextIndex).trim();
-      
+    if (cleanText.trim()) {
       renderedText.push(
-        <div key={`segment-${segmentKey}-${blockCounter++}`} className="my-4 md:my-5 border border-neutral-800 bg-neutral-900/40 rounded-2xl p-4 md:p-5 w-full overflow-hidden shadow-xl ring-1 ring-red-900/10">
-          <div className="flex items-center gap-3 mb-4 font-mono text-[10px] md:text-xs font-bold text-neutral-400 tracking-[0.25em] border-b border-neutral-800/50 pb-3 uppercase">
-            <span className="text-lg filter grayscale opacity-70 group-hover:grayscale-0 transition-all">{segmentInfo?.icon}</span>
-            <span>{segmentInfo?.title}</span>
-            <div className="ml-auto flex items-center gap-2">
-               <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-               <span className="text-red-500/50">LIVE</span>
-            </div>
-          </div>
-          <div className="text-[14px] md:text-[15px] text-neutral-300 leading-relaxed font-sans w-full max-w-full">
-             <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{segmentContent}</Markdown>
-          </div>
+        <div key="clean-main-text" className="w-full">
+          <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{cleanText.trim()}</Markdown>
         </div>
       );
-
-      lastIndex = nextIndex;
-      // If we found a next segment, we need to continue from its start index
-      segmentHeaderRegex.lastIndex = nextIndex;
-    }
-
-    // Remaining text after last segment
-    const remainingText = cleanText.substring(lastIndex).trim();
-    if (remainingText) {
-      renderedText.push(
-        <div key={`post-${blockCounter++}`} className="mt-2">
-          <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{remainingText}</Markdown>
-        </div>
-      );
-    }
-
-    // Fallback if no segments found at all
-    if (renderedText.length === 0 && cleanText.trim()) {
-       renderedText.push(
-         <div key={`fallback-${blockCounter++}`}>
-           <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{cleanText.trim()}</Markdown>
-         </div>
-       );
     }
 
     // Determine the corresponding user prompt that triggered this AI message
@@ -464,16 +380,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
     // Untuk hasil proses biasa, tampilkan HANYA TEKS yang rapi, jelas, dan mudah dibaca langsung di Chat Utama.
     // Komponen proses internal hanya ditampilkan apabila memang dibutuhkan atau diminta secara eksplisit oleh pengguna.
 
-    // 1. Deliberation / Sidang Dewan Multi-Agen Intent Check
-    const deliberationKeywords = [
-      'dewan', 'deliberasi', 'deliberation', 'sidang', 'pilgun', 
-      'evaluasi agen', 'audit dewan', 'transparansi dewan', 'council', 
-      'multi-agen', 'multi-agent', 'lihat sidang', 'buka sidang', 'tampilkan dewan',
-      'hasil deliberasi', 'sidang dewan'
-    ];
-    const isDeliberationRequested = Boolean(userPromptText && deliberationKeywords.some(k => userPromptText.includes(k)));
-
-    // 2. Trading Signal / Market Card Intent Check
+    // 1. Trading Signal / Market Card Intent Check
     const signalKeywords = [
       'kartu sinyal', 'signal card', 'kartu signal', 'sinyal card', 
       'widget sinyal', 'tradingview', 'chart', 'grafik', 'visualisasi sinyal', 
@@ -519,13 +426,6 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
         {studioAppData && (
           <div className="w-full mt-4">
             <StudioAppCard data={studioAppData} />
-          </div>
-        )}
-
-        {/* KOMPONEN PROSES INTERNAL — Hanya ditampilkan jika memang diminta / dibutuhkan oleh pengguna */}
-        {deliberationData && isDeliberationRequested && (
-          <div className="w-full mt-4">
-            <DeliberationCard verdict={deliberationData} />
           </div>
         )}
 

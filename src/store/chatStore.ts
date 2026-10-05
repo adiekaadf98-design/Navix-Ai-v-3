@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { ChatSession, Message, AIMode, MarketMeta } from '../types/chat';
 import { rotateFetch } from '../lib/apiKeyRotator';
+import { safeLocalStorage } from '../utils/safeStorage';
 
 interface ChatState {
   sessions: ChatSession[];
@@ -30,10 +31,10 @@ const DEFAULT_SYSTEM_INSTRUCTION =
   'dan analisis pasar yang akurat. ' +
   'Jika pengguna bertanya tentang kode Pine Script, tulislah di dalam blok kode ```pinescript ... ``` agar dapat dirender dengan indah.';
 
-// Load initial sessions from localStorage if available
+// Load initial sessions from safeLocalStorage if available
 const getInitialSessions = (): ChatSession[] => {
   try {
-    const saved = localStorage.getItem('navix_ai_sessions');
+    const saved = safeLocalStorage.getItem('navix_ai_sessions');
     if (saved) {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -58,10 +59,9 @@ const getInitialSessions = (): ChatSession[] => {
           id: 'welcome-msg',
           role: 'assistant',
           content: 
-            'Halo! Saya **NAVIX AI v2.5**, asisten cerdas Anda.\n\n' +
+            'Halo! Saya **NAVIX AI**, asisten kecerdasan buatan multi-mode Anda.\n\n' +
             'Saya siap membantu Anda dalam:\n' +
-            '- 💬 **Konsultasi Umum**: Tanya jawab topik apa saja secara presisi.\n' +
-            '- 💻 **Coding & Debugging**: Membuat, menganalisis, dan memperbaiki kode Anda.\n' +
+            '- 💻 **Pemrograman & Koding**: Menulis, debugging, dan refactoring kode secara presisi.\n' +
             '- 🧠 **Deep Thinking**: Pemecahan masalah rumit dengan penalaran mendalam.\n' +
             '- 📈 **Analisis Pasar & Trading**: Pembuatan indikator Pine Script v5 dan visualisasi chart.\n\n' +
             'Silakan pilih salah satu contoh pertanyaan di bawah atau ketik langsung pertanyaan Anda!',
@@ -74,18 +74,18 @@ const getInitialSessions = (): ChatSession[] => {
 
 export const useChatStore = create<ChatState>((set, get) => ({
   sessions: getInitialSessions(),
-  activeSessionId: localStorage.getItem('navix_ai_active_id') || 'welcome-session',
+  activeSessionId: safeLocalStorage.getItem('navix_ai_active_id') || 'welcome-session',
   activeMode: 'general',
   isLoading: false,
   isSidebarOpen: true,
   isSettingsOpen: false,
-  systemInstruction: localStorage.getItem('navix_ai_system_instruction') || DEFAULT_SYSTEM_INSTRUCTION,
+  systemInstruction: safeLocalStorage.getItem('navix_ai_system_instruction') || DEFAULT_SYSTEM_INSTRUCTION,
 
   setActiveMode: (mode) => set({ activeMode: mode }),
   setSidebarOpen: (open) => set({ isSidebarOpen: open }),
   setSettingsOpen: (open) => set({ isSettingsOpen: open }),
   setSystemInstruction: (inst) => {
-    localStorage.setItem('navix_ai_system_instruction', inst);
+    safeLocalStorage.setItem('navix_ai_system_instruction', inst);
     set({ systemInstruction: inst });
   },
 
@@ -102,8 +102,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     set((state) => {
       const updated = [newSession, ...state.sessions];
-      localStorage.setItem('navix_ai_sessions', JSON.stringify(updated));
-      localStorage.setItem('navix_ai_active_id', newId);
+      safeLocalStorage.setItem('navix_ai_sessions', JSON.stringify(updated));
+      safeLocalStorage.setItem('navix_ai_active_id', newId);
       return {
         sessions: updated,
         activeSessionId: newId,
@@ -115,7 +115,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   selectSession: (id) => {
-    localStorage.setItem('navix_ai_active_id', id);
+    safeLocalStorage.setItem('navix_ai_active_id', id);
     set((state) => {
       const session = state.sessions.find(s => s.id === id);
       return {
@@ -134,11 +134,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         nextActiveId = filtered.length > 0 ? filtered[0].id : null;
       }
 
-      localStorage.setItem('navix_ai_sessions', JSON.stringify(filtered));
+      safeLocalStorage.setItem('navix_ai_sessions', JSON.stringify(filtered));
       if (nextActiveId) {
-        localStorage.setItem('navix_ai_active_id', nextActiveId);
+        safeLocalStorage.setItem('navix_ai_active_id', nextActiveId);
       } else {
-        localStorage.removeItem('navix_ai_active_id');
+        safeLocalStorage.removeItem('navix_ai_active_id');
       }
 
       return {
@@ -159,7 +159,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
         return s;
       });
-      localStorage.setItem('navix_ai_sessions', JSON.stringify(updated));
+      safeLocalStorage.setItem('navix_ai_sessions', JSON.stringify(updated));
       return { sessions: updated };
     });
   },
@@ -199,7 +199,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
         return s;
       });
-      localStorage.setItem('navix_ai_sessions', JSON.stringify(updated));
+      safeLocalStorage.setItem('navix_ai_sessions', JSON.stringify(updated));
       return { sessions: updated, isLoading: true };
     });
 
@@ -258,7 +258,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         headers,
         body: JSON.stringify({
           message: content,
-          model: (typeof localStorage !== 'undefined' && localStorage.getItem('navix_selected_model')) || 'gemini-3.1-flash-lite',
+          model: safeLocalStorage.getItem('navix_selected_model') || 'gemini-3.8-flash',
           history: geminiContents,
           disableTts: true,
           thinkingMode: activeMode === 'deep_thinking'
@@ -333,7 +333,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           }
           return s;
         });
-        localStorage.setItem('navix_ai_sessions', JSON.stringify(updated));
+        safeLocalStorage.setItem('navix_ai_sessions', JSON.stringify(updated));
         
         // Cloud Firestore Session Sync
         try {

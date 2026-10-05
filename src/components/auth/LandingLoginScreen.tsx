@@ -5,7 +5,7 @@ import { Shield, Mail, Lock, Eye, EyeOff, Loader2, ArrowRight,
   Zap, CheckCircle2, LockKeyhole, Terminal, Layers, Globe, Activity,
   Server, RefreshCw, BarChart2, Video, UserPlus, Check, Trash2, X, ChevronRight
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { isDeveloperEmail } from '../../services/auth';
 import { PaymentModal } from '../PaymentModal';
 import { LiveSkillsConstellation } from './LiveSkillsConstellation';

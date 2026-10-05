@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Server, Cpu, Database, Key, ShieldAlert, BadgeDollarSign, Terminal, 
   Plus, Trash2, Play, Square, Activity, RefreshCw, Search, Bell, 

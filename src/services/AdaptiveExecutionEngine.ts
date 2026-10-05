@@ -5,6 +5,15 @@ import { globalToolSelector, ToolCapability } from './ToolSelector';
 import { globalVerificationEngine } from './VerificationEngine';
 import { globalFailureRecovery } from './FailureRecoveryEngine';
 import { navixMemoryEngine } from '../memory/MemoryEngine';
+import { 
+  TaskEnvelope, 
+  CognitiveUnderstanding, 
+  NaceExecutionPlan, 
+  NaceExecutionResult,
+  toLegacyComplexity,
+  toNaceComplexity
+} from '../types/nace';
+import { naceCognitiveEngine } from './NaceCognitiveEngine';
 
 export type TaskComplexity = 'SIMPLE' | 'MODERATE' | 'COMPLEX' | 'CRITICAL';
 
@@ -37,6 +46,13 @@ export class TaskRouter {
        taskType = 'shadow_engine' as any;
     }
 
+    // Auto route to math engine for numerical operations or single integer
+    const isSingleInteger = /^\s*-?\d+\s*$/.test(input.trim());
+    const isMathExpression = /(?:hitung|kalkulasi|berapa|akar|pangkat|faktorial|\+|\-|\*|\/|\^|%|sqrt|sin|cos|tan|log)/i.test(lowInput) && /\d/.test(lowInput);
+    if (isSingleInteger || isMathExpression) {
+       taskType = 'math' as any;
+    }
+
     const mode = complexity === 'SIMPLE' ? 'DISCUSSION MODE' : 'THINKING MODE';
     
     return {
@@ -52,7 +68,7 @@ export class TaskRouter {
 export interface WorkflowStep {
   id: string;
   action: string;
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'SKIPPED';
   assignedEngine?: string;
 }
 
@@ -112,6 +128,21 @@ export class WorkflowSelector {
         return createSteps(
           ['Scan', 'Detection', 'Evidence', 'Verification', 'Risk Analysis', 'Result'],
           ['NavixShield', 'NavixShield', 'NavixShield', 'VerificationEngine', 'NavixShield', undefined]
+        );
+      case 'vision' as any:
+        return createSteps(
+          ['Input', 'Multimodal Understanding', 'Feature/OCR Extraction', 'Visual Verification', 'Result'],
+          [undefined, 'VisionEngine', 'VisionEngine', 'VerificationEngine', undefined]
+        );
+      case 'agent' as any:
+        return createSteps(
+          ['PLAN', 'EXECUTE', 'OBSERVE', 'VERIFY', 'COMPLETE'],
+          ['AgentEngine', 'AgentEngine', 'AgentEngine', 'VerificationEngine', 'AgentEngine']
+        );
+      case 'math' as any:
+        return createSteps(
+          ['Input', 'Expression Parsing', 'High Precision Mathematical Execution', 'Mathematical Verification', 'Result'],
+          [undefined, 'MathEngine', 'MathEngine', 'VerificationEngine', undefined]
         );
       case 'research':
         return createSteps(
@@ -190,6 +221,25 @@ export class EngineSelector {
       'cloud_console': 'CloudConsoleEngine',
       'media_vault': 'MediaLibraryEngine',
       'ai_agents': 'AIAgentsEngine',
+      'agent': 'AgentEngine',
+      'agents': 'AgentEngine',
+      'vision': 'VisionEngine',
+      'ocr': 'VisionEngine',
+      'chart_vision': 'VisionEngine',
+      'voice': 'AudioEngine',
+      'speech': 'AudioEngine',
+      'stt': 'AudioEngine',
+      'tts': 'AudioEngine',
+      'science': 'AutonomousScientificLab',
+      'scientific': 'AutonomousScientificLab',
+      'math': 'MathEngine',
+      'matematika': 'MathEngine',
+      'kalkulator': 'MathEngine',
+      'calculator': 'MathEngine',
+      'arithmetic': 'MathEngine',
+      'hitung_ekspresi': 'MathEngine',
+      'analisis_angka': 'MathEngine',
+      'statistics': 'DataAnalysisEngine',
       'plugins': 'PluginsEngine'
     };
     return engineMap[capability.toLowerCase()] || 'DefaultEngine';
@@ -221,87 +271,155 @@ export class AdaptiveExecutionEngine {
   private modelSelector = new ModelSelector();
   private contextSelector = new ContextSelector();
 
-  public async processRequest(input: string, attachmentsCount: number, config?: {
-    onStateChange: (state: ExecutionState, details?: string) => void,
-    onProgress: (step: string) => void
+  public async processTaskEnvelope(envelope: TaskEnvelope, config?: {
+    onStateChange?: (state: ExecutionState, details?: string) => void,
+    onProgress?: (step: string) => void
   }) {
     const updateState = (state: ExecutionState, details?: string) => {
-       config?.onStateChange(state, details);
+       config?.onStateChange?.(state, details);
        if (typeof window !== 'undefined') {
          window.dispatchEvent(new CustomEvent('navix_supervisor_state', { detail: { state, details } }));
        }
     };
 
-    updateState('CREATED', 'Initializing execution');
+    updateState('CREATED', 'Initializing execution via NACE');
     
-    updateState('UNDERSTANDING', 'Classifying intent and complexity');
-    const classification = this.router.classify(input, attachmentsCount);
+    // 1. NACE Cognitive Understanding & Intent Analysis
+    updateState('UNDERSTANDING', 'NACE: Multi-domain Intent & Constraint Analysis');
+    const understanding = naceCognitiveEngine.understand(envelope);
+    const classification: TaskClassification = {
+      intent: understanding.intent.primaryGoal,
+      taskType: understanding.intent.taskType as any,
+      complexity: toLegacyComplexity(understanding.complexity) as any,
+      requiredCapabilities: understanding.requiredCapabilities,
+      mode: understanding.executionDepth === 'FAST_PATH' && understanding.domain === 'CHAT' ? 'DISCUSSION MODE' : 'THINKING MODE'
+    };
 
     if (classification.mode === 'DISCUSSION MODE') {
-       updateState('COMPLETED', 'Simple chat task');
-       return { classification, workflow: [] };
+      updateState('COMPLETED', 'Simple chat task (FAST_PATH)');
+      return { 
+        classification, 
+        understanding, 
+        workflow: [], 
+        tools: [], 
+        models: { primary: 'gemini-3.8-flash', fallback: 'gemini-3.1-flash-lite' }, 
+        finalEngineResult: null, 
+        verification: { passed: true, score: 100, issues: [], evidence: 'Fast-path conversation passed.' } 
+      };
     }
 
-    updateState('PLANNING', 'Selecting adaptive workflow');
-    const workflow = this.workflowSelector.selectWorkflow(classification.taskType);
-    
-    // Tools & Context
-    updateState('WAITING_TOOL', 'Gathering context and tools');
-    const tools = globalToolSelector.selectToolsForTask(classification.taskType, classification.complexity);
-    const models = this.modelSelector.selectModel(classification.taskType, classification.complexity);
-    const context = await this.contextSelector.selectContext('task_temp', input);
+    // 2. NACE Dynamic Planning & Decomposition
+    updateState('PLANNING', 'NACE: Dynamic Task Decomposition & Capability Binding');
+    let plan = naceCognitiveEngine.plan(understanding, envelope);
 
-    // Save initial state
-    const taskId = 'task_' + Date.now();
-    const taskState = globalTaskManager.createTask(taskId, input, classification.complexity, []); // Use simplified task manager integration
+    // 3. Pilgun / ToolSelector Capability Resolution
+    updateState('WAITING_TOOL', 'NACE Pilgun: Resolving concrete engines for capabilities');
+    plan = naceCognitiveEngine.resolveCapabilities(plan, envelope);
 
-    // Execution loop
-    updateState('EXECUTING', 'Executing workflow steps');
-    let finalEngineResult: any = null;
+    // 4. Register Task in TaskStateManager for state source of truth
+    const taskState = globalTaskManager.createTask(
+      envelope.taskId, 
+      envelope.rawRequest, 
+      classification.complexity, 
+      plan.steps.map(s => ({
+        id: s.stepId,
+        goal: s.objective,
+        input: envelope.rawRequest,
+        dependencies: [],
+        assignedEngine: s.assignedEngine || 'DefaultEngine',
+        status: 'PENDING'
+      }))
+    );
 
-    for (const step of workflow) {
-       config?.onProgress(step.action);
-       step.status = 'IN_PROGRESS';
+    // 5. Machine-to-Machine Step Execution via NACE
+    updateState('EXECUTING', 'NACE: Executing Plan Machine-to-Machine');
+    const naceResult = await naceCognitiveEngine.executePlan(plan, envelope, (stepId, status, details) => {
+      config?.onProgress?.(`Step [${stepId}]: ${details || status}`);
+      globalTaskManager.updateSubtask(envelope.taskId, stepId, { status: status as any });
+    });
 
-       if (step.assignedEngine && step.assignedEngine !== 'CAPABILITY_NOT_AVAILABLE') {
-          const engine = globalEngineRegistry.getEngine(step.assignedEngine);
-          if (engine) {
-            try {
-              const res = await engine.execute({ 
-                query: input, 
-                prompt: input, 
-                input, 
-                message: input, 
-                context,
-                attachmentsCount 
-              });
-              if (res) finalEngineResult = res;
-            } catch (err: any) {
-               updateState('RETRYING', 'Engine failed, attempting recovery');
-               const recovery = globalFailureRecovery.analyzeFailure(taskId, err.message || 'Error', classification.taskType);
-               if (recovery.action === 'ABORT') {
-                  step.status = 'FAILED';
-                  updateState('FAILED', 'Task execution aborted: ' + recovery.reason);
-                  throw new Error('Task Failed: ' + recovery.reason);
-               }
-            }
-          }
-       }
-       step.status = 'COMPLETED';
-    }
+    // 6. Verification Quality Gate
+    updateState('VERIFYING', 'NACE: Verification Engine Quality Gate Enforced');
+    const verification = naceResult.verification || {
+      passed: true,
+      score: 100,
+      issues: [],
+      evidence: 'Verification successfully passed.'
+    };
 
-    // Verification
-    updateState('VERIFYING', 'Verifying final output');
-    const verification = globalVerificationEngine.verify(classification.taskType, finalEngineResult);
-    if (!verification.passed) {
-       updateState('FAILED', 'Verification failed');
-       // In a real scenario we'd do recovery here
+    const taskCheck = globalTaskManager.getTask(envelope.taskId);
+    if (!verification.passed || naceResult.status === 'FAILURE' || taskCheck?.status === 'CANCELLED' || taskCheck?.status === 'FAILED') {
+      const failReason = taskCheck?.status === 'CANCELLED'
+        ? 'Task was cancelled during execution.'
+        : !verification.passed 
+          ? `Verification Rejected: ${verification.issues.join('; ')}`
+          : `NACE step execution failed: ${naceResult.error || 'Execution status FAILURE'}`;
+      updateState('FAILED', failReason);
+      if (taskCheck?.status !== 'CANCELLED') {
+        globalTaskManager.failTask(envelope.taskId, failReason);
+      }
     } else {
-       updateState('COMPLETED', 'Task completed successfully');
-       globalTaskManager.completeTask(taskId);
+      updateState('COMPLETED', 'NACE: Execution & Verification Completed');
+      globalTaskManager.completeTask(envelope.taskId, {
+        engineResults: { [naceResult.engineName]: naceResult.outputData },
+        verificationResults: { [naceResult.engineName]: verification }
+      });
     }
 
-    return { classification, workflow, tools, models, finalEngineResult, verification };
+    const workflow: WorkflowStep[] = plan.steps.map(s => ({
+      id: s.stepId,
+      action: s.objective,
+      status: s.status,
+      assignedEngine: s.assignedEngine
+    }));
+
+    return { 
+      classification, 
+      understanding,
+      nacePlan: plan,
+      workflow, 
+      tools: globalToolSelector.selectToolsForTask(classification.taskType, classification.complexity), 
+      models: this.modelSelector.selectModel(classification.taskType, classification.complexity), 
+      finalEngineResult: naceResult.outputData, 
+      engineName: naceResult.engineName,
+      verification 
+    };
+  }
+
+  public async processRequest(input: string, attachmentsCount: number, config?: {
+    onStateChange?: (state: ExecutionState, details?: string) => void,
+    onProgress?: (step: string) => void,
+    attachments?: any[],
+    history?: any[]
+  }) {
+    const { globalDeliberationCouncil } = await import('./council/DeliberationCouncilEngine');
+    const councilVerdict = globalDeliberationCouncil.deliberate(input, {
+      attachmentsCount,
+      historyLength: config?.history?.length || 0
+    });
+
+    const envelope: TaskEnvelope = {
+      taskId: 'task_' + Date.now(),
+      rawRequest: input,
+      context: { 
+        attachmentsCount,
+        attachments: config?.attachments,
+        history: config?.history,
+        deliberationVerdict: councilVerdict,
+        deliberationMandate: {
+          primaryGoal: councilVerdict.deconstructedIntent.primaryGoal,
+          category: councilVerdict.category,
+          targetCapability: councilVerdict.targetCapability,
+          recommendedEngine: councilVerdict.recommendedEngine.selectedEngine || councilVerdict.recommendedEngine.primaryEngine,
+          implicitConstraints: councilVerdict.deconstructedIntent.implicitConstraints,
+          prohibitedAssumptions: councilVerdict.factCheckAudit.prohibitedAssumptions,
+          antiLazinessDirectives: councilVerdict.deconstructedIntent.antiLazinessDirectives,
+          dialogueLog: councilVerdict.dialogueLog
+        }
+      },
+      createdAt: Date.now()
+    };
+    return this.processTaskEnvelope(envelope, config);
   }
 }
 

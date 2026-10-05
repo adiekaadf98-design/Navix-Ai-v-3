@@ -1,3 +1,38 @@
+export type ReasonCode =
+  | 'ENTRY_NOT_BELOW_LIVE'
+  | 'ENTRY_NOT_ABOVE_LIVE'
+  | 'ENTRY_EQUAL_TO_LIVE'
+  | 'STOP_ORDER_FORBIDDEN'
+  | 'INVALID_ORDER_TYPE'
+  | 'GEOMETRY_INVALID'
+  | 'STALE_OR_UNAVAILABLE_PRICE'
+  | 'RR_BELOW_MINIMUM'
+  | 'RECALCULATION_FAILED'
+  | 'VERITAS_CHECK_FAILED';
+
+export interface StandardizedTradingSignalSchema {
+  symbol: string;
+  timeframe: string;
+  timestamp: string; // ISO-8601 UTC
+  fetched_at: string; // ISO-8601 UTC
+  livePrice: number;
+  direction: 'BUY' | 'SELL' | 'NO_SIGNAL' | 'FAILED';
+  orderType: 'BUY_LIMIT' | 'SELL_LIMIT' | 'NO_SIGNAL' | 'FAILED';
+  entryPrice: number;
+  slPrice: number;
+  tpPrice: number;
+  riskRewardRatio: string;
+  structure: string;
+  selectedMethod: StrategyEngineType | 'NONE';
+  invalidation: string;
+  source: string;
+  validationStatus: 'VALIDATED' | 'REJECTED' | 'NO_SIGNAL' | 'FAILED';
+  reasonCode?: ReasonCode;
+  reasonNote?: string;
+  ruleChecklist?: StrategyRule[];
+  executionHowTo?: string;
+}
+
 export interface CandleData {
   time: number; // epoch ms
   open: number;
@@ -233,7 +268,7 @@ export interface CRTRangeSetup {
 export interface MarketTickerItem {
   symbol: string;         // e.g. BTCUSDT, SOLUSDT, XAUUSD, EURUSD, US30, NVDA
   displayName: string;    // e.g. BTC/USDT PERP, SOL/USDT PERP, XAU/USD, EUR/USD
-  category: 'Semua' | 'Major' | 'AI' | 'Meme' | 'L1/L2' | 'Komoditas' | 'Forex' | 'Indeks Global' | 'Saham' | 'Saham IDX' | 'Saham US';
+  category: 'Semua' | 'Major' | 'AI' | 'Meme' | 'L1/L2' | 'DeFi' | 'Komoditas' | 'Forex' | 'Indeks Global' | 'Saham' | 'Saham IDX' | 'Saham US' | 'Kustom';
   price: number;
   change24h: number;
   high24h: number;

@@ -4,7 +4,7 @@ import { useAuthStore } from '../../store';
 import { Menu, LayoutDashboard, MessageSquare, Briefcase, Settings, LogOut, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 export const AppLayout = () => {
   const { isAuthenticated, user, checkAuth, logout } = useAuthStore();

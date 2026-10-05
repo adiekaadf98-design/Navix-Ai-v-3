@@ -1,9 +1,4 @@
 import { GoogleGenAI } from '@google/genai';
-import express from 'express';
-import fs from 'fs';
-import path from 'path';
-
-const POOL_STORAGE_PATH = path.join(process.cwd(), '.server_keys_pool.json');
 
 export interface ServerKeyItem {
   key: string;
@@ -21,237 +16,120 @@ class ServerKeyRotatorManager {
     this.refreshPool();
   }
 
-  // Parse keys from process.env, cached storage, and any custom inputs
+  // Parse keys safely from environment or storage
   public refreshPool(additionalKeys: string[] = []) {
     const rawKeys: string[] = [];
 
-    // 1. Check GEMINI_API_KEYS (comma or space or newline separated)
-    if (process.env.GEMINI_API_KEYS) {
-      rawKeys.push(...process.env.GEMINI_API_KEYS.split(/[\n,;]+/).map(k => k.trim()));
-    }
-
-    // 2. Check GEMINI_API_KEY (comma separated or single)
-    if (process.env.GEMINI_API_KEY) {
-      rawKeys.push(...process.env.GEMINI_API_KEY.split(/[\n,;]+/).map(k => k.trim()));
-    }
-
-    // 3. Check numbered env vars GEMINI_API_KEY_1 to 100
-    for (let i = 1; i <= 100; i++) {
-      const k = process.env[`GEMINI_API_KEY_${i}`];
-      if (k) rawKeys.push(k.trim());
-    }
-
-    // 4. Load saved pool from disk if present
-    try {
-      if (fs.existsSync(POOL_STORAGE_PATH)) {
-        const fileContent = fs.readFileSync(POOL_STORAGE_PATH, 'utf-8');
-        const diskKeys = JSON.parse(fileContent);
-        if (Array.isArray(diskKeys)) {
-          rawKeys.push(...diskKeys);
-        }
+    if (typeof process !== 'undefined' && process.env) {
+      // 1. Check GEMINI_API_KEYS
+      if (process.env.GEMINI_API_KEYS) {
+        rawKeys.push(...process.env.GEMINI_API_KEYS.split(/[\n,;]+/).map(k => k.trim()));
       }
-    } catch (err) {
-      console.warn('[SERVER KEY ROTATOR] Could not read .server_keys_pool.json:', err);
+
+      // 2. Check GEMINI_API_KEY
+      if (process.env.GEMINI_API_KEY) {
+        rawKeys.push(...process.env.GEMINI_API_KEY.split(/[\n,;]+/).map(k => k.trim()));
+      }
+
+      // 3. Check numbered env vars GEMINI_API_KEY_1 to 100
+      for (let i = 1; i <= 100; i++) {
+        const k = process.env[`GEMINI_API_KEY_${i}`];
+        if (k) rawKeys.push(k.trim());
+      }
     }
 
-    // 5. Add additional keys (like custom ones passed from frontend / settings)
+    // 4. Add additional keys
     rawKeys.push(...additionalKeys);
 
-    // Save custom keys to disk for persistence across server restarts
-    if (additionalKeys.length > 0) {
-      try {
-        let existingDisk: string[] = [];
-        if (fs.existsSync(POOL_STORAGE_PATH)) {
-          const content = fs.readFileSync(POOL_STORAGE_PATH, 'utf-8');
-          const parsed = JSON.parse(content);
-          if (Array.isArray(parsed)) existingDisk = parsed;
-        }
-        const updatedDisk = Array.from(new Set([...existingDisk, ...additionalKeys]))
-          .map(k => k.trim().replace(/['"\s]/g, ''))
-          .filter(k => k.length > 5)
-          .slice(0, 100);
-        fs.writeFileSync(POOL_STORAGE_PATH, JSON.stringify(updatedDisk, null, 2));
-      } catch (err) {
-        console.warn('[SERVER KEY ROTATOR] Could not persist keys to .server_keys_pool.json:', err);
+    const validKeys = Array.from(new Set(rawKeys))
+      .map(k => k.trim().replace(/['"\s]/g, ''))
+      .filter(k => k.length > 10);
+
+    for (const key of validKeys) {
+      if (!this.keyPool.some(item => item.key === key)) {
+        this.keyPool.push({
+          key,
+          status: 'active',
+          errorCount: 0
+        });
       }
     }
 
-    // Clean and deduplicate up to 100 keys
-    const sanitized = Array.from(new Set(
-      rawKeys
-        .map(k => k.trim().replace(/['"\s]/g, ''))
-        .filter(k => k.length > 5)
-    )).slice(0, 100);
-
-    // Keep existing keys that are currently tracked (so we don't lose cooldown info for custom keys from previous requests)
-    for (const key of sanitized) {
-       if (!this.keyPool.find(k => k.key === key)) {
-          this.keyPool.push({ key, status: 'active', errorCount: 0, lastUsed: Date.now() });
-       }
-    }
-  }
-
-  // Remove a key from pool and disk
-  public removeKey(keyToRemove: string) {
-    const cleaned = keyToRemove.trim().replace(/['"\s]/g, '');
-    this.keyPool = this.keyPool.filter(k => k.key !== cleaned);
-    try {
-      if (fs.existsSync(POOL_STORAGE_PATH)) {
-        const content = fs.readFileSync(POOL_STORAGE_PATH, 'utf-8');
-        const parsed = JSON.parse(content);
-        if (Array.isArray(parsed)) {
-          const filtered = parsed.filter(k => k !== cleaned);
-          fs.writeFileSync(POOL_STORAGE_PATH, JSON.stringify(filtered, null, 2));
-        }
-      }
-    } catch (err) {
-      console.warn('[SERVER KEY ROTATOR] Could not update .server_keys_pool.json on remove:', err);
-    }
-  }
-
-  // Get active keys (with auto cooldown recovery after 60 seconds)
-  public getActiveKeys(requestCustomKeyHeader?: string): string[] {
-    const now = Date.now();
-    const candidateKeys: string[] = [];
-    const customKeys: string[] = [];
-
-    // Parse custom key header (can be single or comma-separated up to 100)
-    if (requestCustomKeyHeader) {
-      const parsed = requestCustomKeyHeader
-        .split(/[\n,;]+/)
-        .map(k => k.trim().replace(/['"\s]/g, ''))
-        .filter(k => k.length > 5);
-      customKeys.push(...parsed);
-    }
-
-    // Refresh environment pool and register the custom keys to track their cooldowns
-    this.refreshPool(customKeys);
-
-    // First prioritize the custom keys requested by the user, if they are active
-    for (const item of this.keyPool) {
-      // Auto recover
-      if (item.status === 'exhausted' && item.cooldownUntil && now > item.cooldownUntil) {
-        item.status = 'active';
-        item.errorMsg = undefined;
-      }
-    }
-
-    const envKey = (process.env.GEMINI_API_KEY || '').trim();
-    if (envKey) {
-      candidateKeys.unshift(envKey);
-    }
-
-    // Now populate candidate keys prioritizing custom keys, then fallback to env keys
-    if (customKeys.length > 0) {
-       for (const ck of customKeys) {
-          const matched = this.keyPool.find(k => k.key === ck);
-          if (matched && matched.status === 'active' && !candidateKeys.includes(matched.key)) {
-             candidateKeys.push(matched.key);
-          }
-       }
-    }
-    // Always append active environment / pool keys as robust fallbacks
-    for (const item of this.keyPool) {
-       if (item.status === 'active' && !candidateKeys.includes(item.key)) {
-          candidateKeys.push(item.key);
-       }
-    }
-
-    // Ensure envKey is at index 0 if valid
-    if (envKey) {
-      const filtered = candidateKeys.filter(k => k !== envKey);
-      candidateKeys.length = 0;
-      candidateKeys.push(envKey, ...filtered);
-    }
-
-    // If candidateKeys empty (all requested/available keys exhausted), auto-reset all exhausted server keys!
-    if (candidateKeys.length === 0 && this.keyPool.length > 0) {
-      let resetSource = customKeys.length > 0 ? customKeys : this.keyPool.map(k => k.key);
-      for (const rk of resetSource) {
-         const item = this.keyPool.find(k => k.key === rk);
-         if (item) {
-           item.status = 'active';
-           item.errorMsg = undefined;
-           item.cooldownUntil = undefined;
-           if (!candidateKeys.includes(item.key)) {
-              candidateKeys.push(item.key);
-           }
-         }
-      }
-    }
-
-    return candidateKeys.slice(0, 100);
-  }
-
-  public markKeyStatus(key: string, status: 'exhausted' | 'invalid', errorMsg: string) {
-    const existing = this.keyPool.find(k => k.key === key);
-    if (existing) {
-      existing.status = status;
-      existing.errorCount += 1;
-      existing.errorMsg = errorMsg;
-      if (status === 'exhausted') {
-        // Cooldown for 60 seconds
-        existing.cooldownUntil = Date.now() + 60000;
-      }
-    } else {
+    if (this.keyPool.length === 0 && typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) {
       this.keyPool.push({
-        key,
-        status,
-        errorCount: 1,
-        errorMsg,
-        cooldownUntil: status === 'exhausted' ? Date.now() + 60000 : undefined
+        key: process.env.GEMINI_API_KEY.trim(),
+        status: 'active',
+        errorCount: 0
       });
     }
   }
 
-  public isQuotaOrAuthError(err: any): { isError: boolean; type: 'exhausted' | 'invalid'; message: string; isZeroLimit?: boolean } {
-    const errString = (err?.message || err?.stack || JSON.stringify(err) || '').toLowerCase();
-    const status = err?.status || err?.statusCode || err?.code;
+  public getActiveKeys(customKey?: string): string[] {
+    this.checkCooldowns();
+    const active = this.keyPool
+      .filter(k => k.status === 'active')
+      .map(k => k.key);
 
-    const isZeroLimit = errString.includes('limit: 0') || errString.includes('limit:0');
-    const isQuota = status === 429 || 
-                    errString.includes('quota') || 
-                    errString.includes('rate limit') || 
-                    errString.includes('resource_exhausted') || 
-                    errString.includes('limit:') ||
-                    isZeroLimit;
-
-    const isAuth = status === 401 || 
-                   errString.includes('unauthenticated') || 
-                   errString.includes('invalid api key') || 
-                   errString.includes('api key not valid') ||
-                   errString.includes('access_token_type_unsupported') ||
-                   errString.includes('invalid authentication');
-
-    const isTemporaryUnavailable = status === 503 ||
-                                   errString.includes('unavailable') ||
-                                   errString.includes('high demand') ||
-                                   errString.includes('timed out') ||
-                                   errString.includes('timeout') ||
-                                   errString.includes('overloaded');
-
-    if (isQuota || isTemporaryUnavailable) {
-      let cleanMsg = isTemporaryUnavailable ? 'Model high demand / temporary unavailable (503)' : 'Quota limit exceeded (429)';
-      if (isZeroLimit) {
-        cleanMsg = 'Model not available on free tier quota (limit: 0)';
-      }
-      return { isError: true, type: 'exhausted', message: cleanMsg, isZeroLimit };
+    if (customKey && customKey.trim().length > 10) {
+      return [customKey.trim(), ...active.filter(k => k !== customKey.trim())];
     }
-    if (isAuth) {
-      return { isError: true, type: 'invalid', message: 'Invalid API key or unauthorized (401)' };
+
+    if (active.length === 0 && typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) {
+      return [process.env.GEMINI_API_KEY.trim()];
     }
-    return { isError: false, type: 'exhausted', message: '' };
+
+    return active;
   }
 
-  // Wrapper to execute any Gemini action with automatic key rotation up to 100 attempts
+  private checkCooldowns() {
+    const now = Date.now();
+    for (const item of this.keyPool) {
+      if (item.status === 'exhausted' && item.cooldownUntil && now >= item.cooldownUntil) {
+        item.status = 'active';
+        item.errorCount = 0;
+        item.cooldownUntil = undefined;
+        item.errorMsg = undefined;
+      }
+    }
+  }
+
+  public markKeyStatus(key: string, type: 'quota' | 'invalid' | 'rate_limit' | 'exhausted', errorMsg?: string) {
+    const item = this.keyPool.find(k => k.key === key);
+    if (!item) return;
+
+    item.errorCount += 1;
+    item.errorMsg = errorMsg;
+
+    if (type === 'invalid') {
+      item.status = 'invalid';
+    } else if (type === 'quota' || type === 'rate_limit' || type === 'exhausted') {
+      item.status = 'exhausted';
+      item.cooldownUntil = Date.now() + 60 * 1000;
+    }
+  }
+
+  private isQuotaOrAuthError(err: any): { isError: boolean; type: 'quota' | 'invalid' | 'rate_limit'; message: string; isZeroLimit: boolean } {
+    const msg = String(err?.message || err || '').toLowerCase();
+    const status = err?.status || err?.statusCode || 0;
+
+    const isZeroLimit = msg.includes('limit: 0') || msg.includes('quota exceeded for metric');
+
+    if (status === 429 || msg.includes('resource_exhausted') || msg.includes('quota') || msg.includes('rate limit')) {
+      return { isError: true, type: 'quota', message: err?.message || 'Quota Exhausted', isZeroLimit };
+    }
+    if (status === 401 || status === 403 || msg.includes('api_key_invalid') || msg.includes('permission_denied') || msg.includes('unauthorized') || msg.includes('api key not valid')) {
+      return { isError: true, type: 'invalid', message: err?.message || 'Invalid API Key', isZeroLimit: false };
+    }
+    return { isError: false, type: 'quota', message: '', isZeroLimit: false };
+  }
+
   public async executeWithRotation<T>(
-    req: express.Request | undefined,
-    actionFn: (ai: GoogleGenAI, key: string) => Promise<T>
+    reqOrKey: any,
+    actionFn: (ai: GoogleGenAI, apiKey: string) => Promise<T>
   ): Promise<T> {
-    // API keys are server-owned secrets. Never accept API keys from client request headers.
     const availableKeys = this.getActiveKeys();
 
-    const envKey = (process.env.GEMINI_API_KEY || '').trim();
+    const envKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY || '').trim();
     if (envKey && !availableKeys.includes(envKey)) {
       availableKeys.push(envKey);
     }
@@ -286,10 +164,8 @@ class ServerKeyRotatorManager {
           console.log(`[SERVER KEY ROTATOR] ${maskedKey} (${errInfo.type}: ${errInfo.message}). Switching to key index ${attempt + 1}...`);
           if (!errInfo.isZeroLimit) {
             this.markKeyStatus(apiKey, errInfo.type, errInfo.message);
-          } else {
-            console.log(`[SERVER KEY ROTATOR] Notice: ${maskedKey} has model-specific limit:0 (free tier restriction). Preserving key for standard models.`);
           }
-          continue; // Try next key in rotation
+          continue;
         }
         throw err;
       }

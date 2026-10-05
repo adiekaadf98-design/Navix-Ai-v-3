@@ -59,6 +59,8 @@ export interface DeliberationVerdict {
     pilgunDetail?: PilgunSelectionResult;
   };
   executionRigorScore: number; // 0 - 100
+  refutationRounds: number;
+  dialecticalConsensusRate: number; // 0.0 to 1.0
   consensusSummary: string;
   dialogueLog: DeliberationDialogue[];
 }
@@ -108,8 +110,10 @@ export class DeliberationCouncilEngine {
     if (q.length === 0) return true;
 
     // 1. Sapaan dan keramahan singkat
-    if (q.length < 40 && /^(halo|hai|p|pagi|siang|sore|malam|terima kasih|makasih|thanks|siapa kamu|apa kabar|ok|oke|siap|good morning|hello|hi)[\s.!?]*$/i.test(q)) {
-      return true;
+    if (q.length < 60 && /(?:^|\b)(halo|hai|p|pagi|siang|sore|malam|terima kasih|makasih|thanks|siapa kamu|apa kabar|ok|oke|siap|good morning|hello|hi)\b/i.test(q)) {
+      if (!/(trading|crypto|kripto|saham|forex|gold|xauusd|btcusdt|harga|market|candle|gambar|lukis|foto|video|lagu|musik|audio|github|repo|hitung|kalkulasi)/i.test(q)) {
+        return true;
+      }
     }
 
     // 2. Pertanyaan konsep murni, edukasi teoretis, atau dialog umum tanpa kebutuhan feed bursa atau generator media
@@ -147,12 +151,29 @@ export class DeliberationCouncilEngine {
         timestamp: timestamp + 20
       });
       dialogueLog.push({
+        agentId: 'agent_fact_checker',
+        agentName: 'Agent Veritas (Adversarial Fact Checker)',
+        role: 'Pemeriksa Integritas Konseptual',
+        thought: 'Memastikan dialog bebas dari halusinasi dan memelihara kepatuhan etis serta presisi logika.',
+        critique: 'Pastikan penjelasan berbasis penalaran logis yang jernih dan santun.',
+        recommendation: 'Jaga standar faktual dan integritas respons.',
+        timestamp: timestamp + 40
+      });
+      dialogueLog.push({
+        agentId: 'agent_engine_arbitrator',
+        agentName: 'Agent Apex (Machine Arbitrator)',
+        role: 'Evaluasi Kebutuhan Mesin',
+        thought: 'Tugas ini dapat diselesaikan langsung melalui jalur kognitif cepat (Fast-Path) tanpa komputasi GPU berat.',
+        recommendation: 'Alokasikan ke Conversational Fast-Path.',
+        timestamp: timestamp + 60
+      });
+      dialogueLog.push({
         agentId: 'agent_rigor_director',
         agentName: 'Agent Sovereign (Consensus Director)',
         role: 'Direktur Konsensus',
         thought: 'Sidang menetapkan alur dialog kognitif cerdas (USER -> AI DEBAT -> JAWABAN) tanpa bypass atau pemanggilan tool yang tidak perlu.',
         recommendation: 'Langsung formulasikan respons komprehensif kepada pengguna.',
-        timestamp: timestamp + 50
+        timestamp: timestamp + 80
       });
 
       return {
@@ -176,6 +197,8 @@ export class DeliberationCouncilEngine {
           justification: 'Diskusi langsung & reasoning konseptual dieksekusi secara elegan tanpa beban eksternal.'
         },
         executionRigorScore: 99,
+        refutationRounds: 1,
+        dialecticalConsensusRate: 1.0,
         consensusSummary,
         dialogueLog
       };
@@ -230,6 +253,27 @@ export class DeliberationCouncilEngine {
       evaluatesOpenSource = true;
       openSourceRationale = 'Mengevaluasi repositori GitHub pihak ketiga dan matriks dependensi open-source terverifikasi.';
       factualConfidence = 99;
+      hallucinationRisk = 'ZERO';
+    } else if (
+      /^\s*-?\d+\s*$/.test(userQuery.trim()) ||
+      (/(?:hitung|kalkulasi|berapa|akar|pangkat|faktorial|\+|\-|\*|\/|\^|%|sqrt|sin|cos|tan|log|gcd|lcm|persen|integral|derivatif)/i.test(q) && /\d/.test(q))
+    ) {
+      category = 'CAPABILITY_EXECUTION';
+      targetCapability = 'math';
+      primaryGoal = 'Komputasi matematika deterministik presisi tinggi (50 digit signifikan) dan analisis angka tunggal.';
+      implicitConstraints.push('Wajib komputasi deterministik presisi tinggi 50 digit signifikan, dilarang aproksimasi buatan model.');
+      implicitConstraints.push('Hasil komputasi fungsi MathEngine adalah source of truth yang tidak boleh diubah oleh AI utama.');
+      antiLazinessDirectives.push('Teruskan seluruh formula ke MathEngine deterministik tanpa menghitung sendiri secara internal.');
+      
+      thesisThought = `Argumen Horizon (Analis Matematika): Permintaan terdeteksi memerlukan perhitungan numerik atau analisis bilangan bulat. Seluruh kalkulasi wajib diarahkan ke Navix Math Engine.`;
+      veritasCritique = `Sanggahan Veritas (Auditor Presisi): Model dilarang keras menebak angka atau menghitung dalam benak AI. Hanya hasil presisi tinggi 50-digit dari MathEngine yang sah sebagai sumber kebenaran mutlak.`;
+      apexStrategy = `Strategi Apex (Arbiter Pilgun): Pilgun mengalokasikan eksekusi langsung ke MathEngine untuk komputasi nyata deterministik dan verifikasi 100%.`;
+      
+      primaryEngine = 'MathEngine';
+      candidateEngines = ['MathEngine', 'DataAnalysisEngine'];
+      engineSequence = ['MathEngine', 'VerificationEngine'];
+      justification = 'Membutuhkan kalkulasi numerik deterministik presisi tinggi 50 digit signifikan atau analisis angka nyata.';
+      factualConfidence = 100;
       hallucinationRisk = 'ZERO';
     } else if (q.includes('trading') || q.includes('crypto') || q.includes('forex') || q.includes('gold') || q.includes('xauusd') || q.includes('saham') || q.includes('btc') || q.includes('sol') || q.includes('eth') || q.includes('bbca') || q.includes('nvda')) {
       category = 'DATA_RETRIEVAL';
@@ -433,6 +477,8 @@ export class DeliberationCouncilEngine {
         pilgunDetail
       },
       executionRigorScore: 98,
+      refutationRounds: 2,
+      dialecticalConsensusRate: Number((factualConfidence / 100).toFixed(2)),
       consensusSummary: finalConsensus,
       dialogueLog
     };

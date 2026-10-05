@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { MonitoringService } from '../../services';
 import { Activity, Database, Server, Cpu, Clock, CheckCircle2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { clsx } from 'clsx';
 
 export const Dashboard = () => {

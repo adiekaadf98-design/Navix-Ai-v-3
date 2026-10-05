@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../../store';
 import { Loader2, Mail, Lock, Eye, EyeOff, Shield, ChevronRight } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { initiateRealGoogleAuth } from '../../utils/oauthClient';
 
 // Basic Apple Icon SVG

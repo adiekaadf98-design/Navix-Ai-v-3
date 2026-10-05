@@ -242,6 +242,80 @@ export class MobileEdgeOptimizer {
     if (cleaned.length <= maxChars) return cleaned;
     return cleaned.substring(0, maxChars) + '\n...[Truncked for mobile bandwidth efficiency]';
   }
+
+  /**
+   * Memory & Resource Reclamation for Mobile/APK WebViews:
+   * Keeps an LRU cache for large media items and computation states,
+   * evicting old entries when total payload exceeds memory limits.
+   */
+  private mediaCache = new Map<string, { data: any; sizeBytes: number; timestamp: number }>();
+  private maxCacheBytes = 25 * 1024 * 1024; // 25 MB max memory footprint
+  private currentCacheBytes = 0;
+
+  public putMediaCache(key: string, data: any, estimatedBytes?: number): void {
+    const size = estimatedBytes || (typeof data === 'string' ? data.length * 2 : 1024);
+    
+    // Evict oldest items if exceeding capacity
+    while (this.currentCacheBytes + size > this.maxCacheBytes && this.mediaCache.size > 0) {
+      const oldestKey = this.mediaCache.keys().next().value;
+      if (!oldestKey) break;
+      const item = this.mediaCache.get(oldestKey);
+      if (item) {
+        this.currentCacheBytes -= item.sizeBytes;
+        this.mediaCache.delete(oldestKey);
+      }
+    }
+
+    this.mediaCache.set(key, { data, sizeBytes: size, timestamp: Date.now() });
+    this.currentCacheBytes += size;
+  }
+
+  public getMediaCache<T = any>(key: string): T | undefined {
+    const item = this.mediaCache.get(key);
+    if (!item) return undefined;
+    // Move to end (most recently used)
+    this.mediaCache.delete(key);
+    this.mediaCache.set(key, item);
+    return item.data as T;
+  }
+
+  public reclaimMemory(): { freedBytes: number; remainingEntries: number } {
+    const before = this.currentCacheBytes;
+    this.mediaCache.clear();
+    this.currentCacheBytes = 0;
+    return { freedBytes: before, remainingEntries: 0 };
+  }
+
+  /**
+   * Fast-Path Arbitration: Determines whether an incoming prompt can execute on-device
+   * or via direct micro-engine instead of triggering heavy multi-worker workflows.
+   */
+  public evaluateFastPath(prompt: string): { isFastPath: boolean; recommendedRoute: string; reason: string } {
+    const trimmed = prompt.trim();
+    const low = trimmed.toLowerCase();
+
+    // 1. Single integer analysis
+    if (/^\s*-?\d+\s*$/.test(trimmed)) {
+      return { isFastPath: true, recommendedRoute: 'MathEngine', reason: 'Single integer analysis runs via deterministic MathEngine in 0ms' };
+    }
+
+    // 2. Direct arithmetic or percentage
+    if (/^[\d\s\+\-\*\/\^\(\)\.%,sqrt|sin|cos|tan|log|pi|e|phi|abs|pow|exp]+$/i.test(trimmed) && /\d/.test(trimmed)) {
+      return { isFastPath: true, recommendedRoute: 'MathEngine', reason: 'Pure mathematical expression runs via deterministic 50-digit MathEngine' };
+    }
+
+    // 3. Short math query
+    if (/(?:hitung|kalkulasi|akar|pangkat|berapa)\s+[\d\s\+\-\*\/\^\(\)\.%,]+/i.test(low) && low.length < 60) {
+      return { isFastPath: true, recommendedRoute: 'MathEngine', reason: 'Short arithmetic query prioritizes deterministic MathEngine fast-path' };
+    }
+
+    // 4. World clock query
+    if (low === 'jam berapa' || low === 'world clock' || low === 'waktu utc') {
+      return { isFastPath: true, recommendedRoute: 'WorldClockEngine', reason: 'Time inquiry executes instantly on-device' };
+    }
+
+    return { isFastPath: false, recommendedRoute: 'STANDARD_ORCHESTRATION', reason: 'Complex or multi-domain request requires full deliberation council' };
+  }
 }
 
 export const mobileEdgeOptimizer = new MobileEdgeOptimizer();

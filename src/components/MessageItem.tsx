@@ -218,7 +218,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, onRegenerate 
                   }
                 }}
               >
-                {message.content}
+                {message.content.replace(/```(?:json)?\s*deliberation[\s\S]*?```/ig, '').trim()}
               </ReactMarkdown>
             </div>
           )}

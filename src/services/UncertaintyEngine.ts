@@ -6,9 +6,12 @@ export interface UncertaintyMetrics {
   independentVerification: boolean;
   contradictionRisk: number; // 0.0 to 1.0
   freshness: number; // 0.0 to 1.0
+  epistemicUncertainty: number; // Reducible with more evidence / research (0..1)
+  aleatoricUncertainty: number; // Inherent stochastic noise in domain (0..1)
   compositeUncertainty: number; // 0.0 (certain) to 1.0 (completely uncertain)
   knowledgeState: 'STABLE' | 'VOLATILE' | 'DECAYING';
   isActionable: boolean;
+  calibrationGrade: 'EXCELLENT' | 'ADEQUATE' | 'NEEDS_DATA_GROUNDING';
 }
 
 export class UncertaintyEngine {
@@ -20,9 +23,12 @@ export class UncertaintyEngine {
         independentVerification: false,
         contradictionRisk: 1.0,
         freshness: 0,
+        epistemicUncertainty: 1.0,
+        aleatoricUncertainty: 0.5,
         compositeUncertainty: 1.0,
         knowledgeState: 'VOLATILE',
-        isActionable: false
+        isActionable: false,
+        calibrationGrade: 'NEEDS_DATA_GROUNDING'
       };
     }
 
@@ -47,15 +53,23 @@ export class UncertaintyEngine {
 
     const independentVerification = claim.status === 'TRUSTED' || (claim.status === 'SUPPORTED' && evidenceQuality >= 0.8);
 
+    // Epistemic uncertainty: high when evidence is sparse or quality is low (can be reduced with research)
+    const epistemicUncertainty = Math.max(0, Math.min(1.0, Number((1 - (evidenceQuality * 0.6 + evidenceCoverage * 0.4)).toFixed(2))));
+
+    // Aleatoric uncertainty: inherent volatility / contradiction presence
+    const aleatoricUncertainty = Math.max(0, Math.min(1.0, Number((contradictionRisk * 0.7 + (1 - freshness) * 0.3).toFixed(2))));
+
     const knowledgeState: 'STABLE' | 'VOLATILE' | 'DECAYING' = 
       freshness < 0.3 ? 'DECAYING' : (contradictionRisk > 0.5 ? 'VOLATILE' : 'STABLE');
 
-    // Composite uncertainty calculation: higher contradiction/decay -> higher uncertainty; higher quality/coverage -> lower uncertainty
+    // Composite uncertainty calculation
     const positiveConfidence = (evidenceQuality * 0.4) + (evidenceCoverage * 0.3) + (freshness * 0.3);
     const riskFactor = contradictionRisk * 0.5;
     const compositeUncertainty = Math.max(0, Math.min(1.0, Number((1 - positiveConfidence + riskFactor).toFixed(2))));
 
     const isActionable = compositeUncertainty < 0.45 && contradictionRisk < 0.4;
+    const calibrationGrade: 'EXCELLENT' | 'ADEQUATE' | 'NEEDS_DATA_GROUNDING' = 
+      compositeUncertainty < 0.25 ? 'EXCELLENT' : compositeUncertainty < 0.55 ? 'ADEQUATE' : 'NEEDS_DATA_GROUNDING';
 
     return {
       evidenceCoverage,
@@ -63,9 +77,12 @@ export class UncertaintyEngine {
       independentVerification,
       contradictionRisk,
       freshness,
+      epistemicUncertainty,
+      aleatoricUncertainty,
       compositeUncertainty,
       knowledgeState,
-      isActionable
+      isActionable,
+      calibrationGrade
     };
   }
 

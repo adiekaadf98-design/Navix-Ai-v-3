@@ -46,12 +46,14 @@ export const LiveSkillsConstellation: React.FC = () => {
     if (!ctx) return;
 
     let animationFrameId: number;
-    let width = (canvas.width = containerRef.current?.clientWidth || 300);
+    const initialW = containerRef.current?.clientWidth || 300;
+    let width = (canvas.width = Math.max(initialW, 200));
     let height = (canvas.height = 130);
 
     const handleResize = () => {
       if (containerRef.current && canvas) {
-        width = canvas.width = containerRef.current.clientWidth;
+        const w = containerRef.current.clientWidth || 300;
+        width = canvas.width = Math.max(w, 200);
         height = canvas.height = 130;
       }
     };

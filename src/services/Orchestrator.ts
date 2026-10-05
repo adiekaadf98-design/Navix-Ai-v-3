@@ -124,6 +124,45 @@ export interface OrchestratorResponse {
   systemInstruction?: string;
 }
 
+export function sanitizeUserDelivery(raw: string): string {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw
+    // 1. Strip booster block header and lines
+    .replace(/\[⚡ NAVIX AI PERFORMANCE BOOSTER[^\]]*\]:?[^\n]*/gi, '')
+    .replace(/^\s*-\s*Status Booster:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Konsensus Dewan Deliberasi:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Petunjuk Anti-Kemalasan:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Audit Risiko Halusinasi:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Bukti Empiris Terverifikasi:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Konteks Memori Kognitif:[^\n]*/gim, '')
+    // 2. Strip directives and mandates
+    .replace(/\[MANDAT MUTLAK\]:?[^\n]*/gi, '')
+    .replace(/\[MANDAT KOGNITIF NAVIX AI\]:?[^\n]*/gi, '')
+    .replace(/\[INSTRUKSI UTAMA & MANDAT MUTLAK JAWABAN PRESISI\]:?[^\n]*/gi, '')
+    // 3. Strip system contexts, directives, telemetry, and debug traces
+    .replace(/\[SYSTEM CONTEXT:[^\]]*\]/gi, '')
+    .replace(/\[INTERNAL EXECUTION TRACE[^\]]*\]/gi, '')
+    .replace(/\[INTERNAL TELEMETRY:[^\]]*\]/gi, '')
+    .replace(/\[COUNCIL_DIRECTIVE:[^\]]*\]/gi, '')
+    .replace(/\[ENGINE_DEBUG:[^\]]*\]/gi, '')
+    .replace(/\[GATE_RESULT:[^\]]*\]/gi, '')
+    .replace(/\[PROMPT_INJECTION_DEFENSE:[^\]]*\]/gi, '')
+    .replace(/\[ROUTING_METADATA:[^\]]*\]/gi, '')
+    .replace(/\[DEBUG_TRACE:[^\]]*\]/gi, '')
+    .replace(/\[TELEMETRY:[^\]]*\]/gi, '')
+    // 4. Strip engine result echoing
+    .replace(/\[HASIL NYATA EKSEKUSI ENGINE[^\]]*\]:?[^\n]*/gi, '')
+    .replace(/^\s*-\s*Nama Mesin:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Status Eksekusi:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Waktu Komputasi:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Harga Pasar Terkini:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Pesan Mesin:[^\n]*/gim, '')
+    .replace(/^\s*-\s*Rincian Eksekusi Berantai[^\n]*/gim, '')
+    // 5. Clean excess whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export class NavixOrchestrator {
   /**
    * Menerima permintaan dari pengguna, menentukan mesin yang sesuai melalui ServiceRegistry,
@@ -213,9 +252,52 @@ export class NavixOrchestrator {
         };
       }
 
-      if (!req.message.startsWith('[GOOGLE_COMPOSITE]') && req.thinkingMode) {
+      // =========================================================================
+      // STEP 1: Cognitive Grounding & Deliberation Council (AI Debat & Pilgun Arbiter)
+      // Multi-Agent Deliberation Council (Horizon, Veritas, Apex, Sovereign)
+      // =========================================================================
+      notify("booster_evidence", "pending", "Ekstraksi Bukti Empiris & Validasi Intent");
+      const evidenceEngine = new EvidenceEngine();
+      const extractedEvidence = evidenceEngine.extractEvidence(req.message, "User Prompt");
+
+      notify("booster_council", "pending", "Sidang Dewan Deliberasi Multi-Agen (Pilgun Arbitrator)");
+      const councilVerdict = globalDeliberationCouncil.deliberate(req.message, {
+        attachmentsCount: req.attachments?.length || 0,
+        historyLength: req.history?.length || 0
+      });
+
+      notify("booster_guardrails", "pending", "Verifikasi Anti-Halusinasi & Guardrails");
+      const boosterData: any = {
+        evidence: extractedEvidence,
+        council: councilVerdict,
+        memory: ""
+      };
+
+      if (!req.message.startsWith('[GOOGLE_COMPOSITE]')) {
         try {
-          adaptiveResult = await globalAdaptiveEngine.processRequest(req.message, req.attachments?.length || 0, {
+          const envelope = {
+            taskId: 'task_' + Date.now(),
+            rawRequest: req.message,
+            context: {
+              attachmentsCount: req.attachments?.length || 0,
+              attachments: req.attachments,
+              history: req.history,
+              deliberationVerdict: councilVerdict,
+              deliberationMandate: {
+                primaryGoal: councilVerdict.deconstructedIntent.primaryGoal,
+                category: councilVerdict.category,
+                targetCapability: councilVerdict.targetCapability,
+                recommendedEngine: councilVerdict.recommendedEngine.selectedEngine || councilVerdict.recommendedEngine.primaryEngine,
+                implicitConstraints: councilVerdict.deconstructedIntent.implicitConstraints,
+                prohibitedAssumptions: councilVerdict.factCheckAudit.prohibitedAssumptions,
+                antiLazinessDirectives: councilVerdict.deconstructedIntent.antiLazinessDirectives,
+                dialogueLog: councilVerdict.dialogueLog
+              }
+            },
+            createdAt: Date.now()
+          };
+
+          adaptiveResult = await globalAdaptiveEngine.processTaskEnvelope(envelope, {
              onStateChange: (state, details) => {
                notify("supervisor_state", "pending", state);
              },
@@ -265,101 +347,83 @@ export class NavixOrchestrator {
         }
       }
 
-      // =========================================================================
-      // NAVIX AI — ENGINE-FIRST ARCHITECTURE WITH COGNITIVE DELIBERATION (AI DEBAT)
-      // Flow:
-      // USER -> MAIN CHAT -> AI DEBAT (Dewan Deliberasi & Pilgun Arbitrator) ->
-      // ROUTING -> SKILL/TOOL -> ENGINE EXECUTION -> REAL OUTPUT ->
-      // VERIFICATION -> AI RESPONSE FORMATTER -> MAIN CHAT -> USER
-      // =========================================================================
-
-      // Step 1: Cognitive Grounding & Deliberation Council (AI Debat & Pilgun Selection)
-      let boosterData: any = null;
-      if (req.aiBooster || req.thinkingMode) {
-        notify("booster_evidence", "pending", "Ekstraksi Bukti Empiris & Validasi Intent");
-        const evidenceEngine = new EvidenceEngine();
-        const extractedEvidence = evidenceEngine.extractEvidence(req.message, "User Prompt");
-
-        notify("booster_council", "pending", "Sidang Dewan Deliberasi Multi-Agen (Pilgun Arbitrator)");
-        const councilVerdict = globalDeliberationCouncil.deliberate(req.message);
-
-        notify("booster_guardrails", "pending", "Verifikasi Anti-Halusinasi & Guardrails");
-        boosterData = {
-          evidence: extractedEvidence,
-          council: councilVerdict,
-          memory: ""
-        };
-      }
-
       let engineResult: any = null;
       let engineName = "DefaultEngine";
       if (adaptiveResult && adaptiveResult.finalEngineResult) {
         engineResult = adaptiveResult.finalEngineResult;
-        if (adaptiveResult.classification && adaptiveResult.classification.taskType === "knowledge_lab") {
-          engineName = "KnowledgeLab";
-        } else {
-          engineName = "AdaptiveExecutionEngine";
-        }
+        engineName = adaptiveResult.engineName || (adaptiveResult.classification?.taskType === "knowledge_lab" ? "KnowledgeLab" : "DefaultEngine");
+      } else if (adaptiveResult && adaptiveResult.classification?.mode === 'DISCUSSION MODE') {
+        engineName = 'AI_DEBATE';
+        engineResult = null;
       } else {
         notify("agent_state", "pending", "Analyzing Intent & Planning Tasks");
         const executionPlan = ServiceRegistry.planExecution(req.message, req.attachments);
         console.log(`[Orchestrator] 🧠 Intent & Task Analysis:`, executionPlan);
 
-        // Synergize with Deliberation Council & Pilgun Arbiter:
-        if (executionPlan.mode !== 'MULTI' && boosterData?.council?.recommendedEngine?.selectedEngine) {
-          const pilgunSelected = boosterData.council.recommendedEngine.selectedEngine;
-          if (globalEngineRegistry.hasEngine(pilgunSelected) && pilgunSelected !== 'DefaultEngine') {
-            console.log(`[Orchestrator] 🎯 Pilgun Arbiter Selected Engine: [${pilgunSelected}] over [${executionPlan.primaryEngine}]`);
-            executionPlan.primaryEngine = pilgunSelected;
-          }
-        }
-
-        engineName = executionPlan.primaryEngine;
-        notify("engine_started", "pending", `Dispatching to ${engineName}`);
-
-        if (executionPlan.mode === 'MULTI' && executionPlan.tasks.length > 1) {
-          // Multi-engine pipeline execution via AgentEngine
-          const agentEngine = globalEngineRegistry.getEngine('AgentEngine');
-          if (agentEngine) {
-            notify("engine_progress", "pending", `Running Multi-Engine Pipeline (${executionPlan.engineSequence.join(' ➔ ')})`);
-            engineResult = await agentEngine.execute({
-              goal: req.message,
-              steps: executionPlan.tasks
-            });
-            engineName = 'AgentEngine';
-          }
+        if (executionPlan.mode === 'DIRECT_CHAT') {
+          console.log(`[Orchestrator] 💬 Fast-path Dialogis Murni (AI Debat -> Main Chat): Tanpa pemanggilan worker engine.`);
+          engineName = 'AI_DEBATE';
+          engineResult = null;
         } else {
-          // Single engine execution
-          const engine = globalEngineRegistry.getEngine(engineName);
-          if (engine) {
-            notify("engine_progress", "pending", `Executing ${engineName}`);
-            console.log(`[Orchestrator] ⚙️ Executing Worker Engine: [${engineName}]`);
+          // Synergize with Deliberation Council & Pilgun Arbiter:
+          if (executionPlan.mode !== 'MULTI' && boosterData?.council?.recommendedEngine?.selectedEngine) {
+            const pilgunSelected = boosterData.council.recommendedEngine.selectedEngine;
+            if (globalEngineRegistry.hasEngine(pilgunSelected) && pilgunSelected !== 'DefaultEngine' && pilgunSelected !== 'AI_DEBATE') {
+              console.log(`[Orchestrator] 🎯 Pilgun Arbiter Selected Engine: [${pilgunSelected}] over [${executionPlan.primaryEngine}]`);
+              executionPlan.primaryEngine = pilgunSelected;
+            }
+          }
 
-            const taskPayload = executionPlan.tasks[0]?.payload || {
-              query: req.message,
-              prompt: req.message,
-              input: req.message,
-              attachments: req.attachments
-            };
+          engineName = executionPlan.primaryEngine;
+          notify("engine_started", "pending", `Dispatching to ${engineName}`);
 
-            try {
-              engineResult = await engine.execute(taskPayload);
-            } catch (execErr: any) {
-              console.error(`[Orchestrator] Engine [${engineName}] execution error:`, execErr);
-              engineResult = {
-                status: 'FAILED',
-                source: engineName,
-                engineName,
-                error: execErr?.message || 'Gagal mengeksekusi mesin.',
-                message: `Mesin ${engineName} mengalami kendala: ${execErr?.message || 'Error'}`
-              };
+          if (executionPlan.mode === 'MULTI' && executionPlan.tasks.length > 1) {
+            // Multi-engine pipeline execution via AgentEngine
+            const agentEngine = globalEngineRegistry.getEngine('AgentEngine');
+            if (agentEngine) {
+              notify("engine_progress", "pending", `Running Multi-Engine Pipeline (${executionPlan.engineSequence.join(' ➔ ')})`);
+              engineResult = await agentEngine.execute({
+                goal: req.message,
+                steps: executionPlan.tasks
+              });
+              engineName = 'AgentEngine';
             }
           } else {
-            console.warn(`[Orchestrator] Engine [${engineName}] not found in Registry. Using DefaultEngine.`);
-            const defEngine = globalEngineRegistry.getEngine('DefaultEngine');
-            if (defEngine) {
-              engineResult = await defEngine.execute({ query: req.message });
-              engineName = 'DefaultEngine';
+            // Single engine execution
+            const engine = globalEngineRegistry.getEngine(engineName);
+            if (engine) {
+              notify("engine_progress", "pending", `Executing ${engineName}`);
+              console.log(`[Orchestrator] ⚙️ Executing Worker Engine: [${engineName}]`);
+
+              const basePayload = {
+                query: req.message,
+                prompt: req.message,
+                input: req.message,
+                expression: req.message,
+                integer: req.message,
+                attachments: req.attachments
+              };
+              const taskPayload = { ...basePayload, ...(executionPlan.tasks[0]?.payload || {}) };
+
+              try {
+                engineResult = await engine.execute(taskPayload);
+              } catch (execErr: any) {
+                console.error(`[Orchestrator] Engine [${engineName}] execution error:`, execErr);
+                engineResult = {
+                  status: 'FAILED',
+                  source: engineName,
+                  engineName,
+                  error: execErr?.message || 'Gagal mengeksekusi mesin.',
+                  message: `Mesin ${engineName} mengalami kendala: ${execErr?.message || 'Error'}`
+                };
+              }
+            } else {
+              console.warn(`[Orchestrator] Engine [${engineName}] not found in Registry. Using DefaultEngine.`);
+              const defEngine = globalEngineRegistry.getEngine('DefaultEngine');
+              if (defEngine) {
+                engineResult = await defEngine.execute({ query: req.message });
+                engineName = 'DefaultEngine';
+              }
             }
           }
         }
@@ -367,8 +431,9 @@ export class NavixOrchestrator {
 
       // Step: Result Validation
       notify("supervisor_state", "pending", "Validating Engine Output");
-      const isSuccess = engineResult && (
+      const isSuccess = !engineResult || (
         engineResult.status === 'SUCCESS' ||
+        engineResult.status === 'COMPLETED' ||
         engineResult.status === 'success' ||
         engineResult.realOutput ||
         engineResult.data
@@ -446,19 +511,41 @@ export class NavixOrchestrator {
         }
       }
 
-      // Legacy fallback Verification
-      if (engineResult && !adaptiveResult && req.thinkingMode) {
+      // Verification Quality Gate: Mandatory on all worker engine outputs
+      if (engineResult && !adaptiveResult) {
         notify("supervisor_state", "pending", "VERIFYING");
         const { taskType } = classifyTask(req.message);
-        const verification = globalVerificationEngine.verify(taskType, engineResult.data || engineResult);
+        const verification = globalVerificationEngine.verify(taskType, engineResult.data || engineResult.output || engineResult);
         
         if (!verification.passed) {
           notify("supervisor_state", "pending", "CORRECTING");
-          const recovery = globalFailureRecovery.analyzeFailure('default', verification.issues.join(', '), taskType);
-          console.warn('Verification failed:', verification.issues, 'Recovery Plan:', recovery);
+          const recovery = globalFailureRecovery.analyzeFailure(engineName, verification.issues.join(', '), taskType, engineName);
+          console.warn('[Orchestrator] Verification failed:', verification.issues, 'Recovery Plan:', recovery);
           if (recovery.action === 'ABORT') {
             notify("supervisor_state", "pending", "FAILED");
+            engineResult.status = 'VERIFICATION_FAILED';
             engineResult.message = "VERIFICATION FAILED: " + verification.issues.join(', ');
+          } else if (recovery.action === 'ALTERNATIVE_ENGINE' && recovery.alternativeEngine) {
+            const altEngine = globalEngineRegistry.getEngine(recovery.alternativeEngine);
+            if (altEngine) {
+              try {
+                notify("engine_progress", "pending", `Recovering via alternative engine: ${recovery.alternativeEngine}`);
+                const recoveredResult = await altEngine.execute({
+                  query: req.message,
+                  prompt: req.message,
+                  input: req.message,
+                  expression: req.message,
+                  attachments: req.attachments,
+                  ...(engineResult.data || {})
+                });
+                if ((recoveredResult.status || '').toUpperCase() === 'SUCCESS') {
+                  engineResult = recoveredResult;
+                  engineName = recovery.alternativeEngine;
+                }
+              } catch (recErr: any) {
+                console.warn('[Orchestrator] Alternative engine recovery failed:', recErr);
+              }
+            }
           }
         }
       }
@@ -485,7 +572,7 @@ export class NavixOrchestrator {
         }
         messageToSend += `[MANDAT MUTLAK]: Berikan jawaban komprehensif, presisi mutlak, tuntas tanpa disingkat, dan sepenuhnya berbasis bukti faktual nyata tanpa simulasi.\n`;
       }
-      if (engineResult) {
+      if (engineResult && engineName !== 'DefaultEngine' && engineName !== 'AI_DEBATE') {
         messageToSend += `\n\n[HASIL NYATA EKSEKUSI ENGINE - NAVIX VERIFIED DATA]:\n`;
         messageToSend += `- Nama Mesin: ${engineName}\n`;
         messageToSend += `- Status Eksekusi: ${engineResult.status || 'SUCCESS'}\n`;
@@ -497,6 +584,12 @@ export class NavixOrchestrator {
         }
         if (engineResult.message) {
           messageToSend += `- Pesan Mesin: ${engineResult.message}\n`;
+        }
+        if (engineResult.output?.executedSteps && Array.isArray(engineResult.output.executedSteps)) {
+          messageToSend += `- Rincian Eksekusi Berantai Multi-Mesin (Step-by-Step Pipeline):\n`;
+          engineResult.output.executedSteps.forEach((s: any) => {
+            messageToSend += `  • [Langkah ${s.stepNumber}] Mesin: ${s.engine} | Status: ${s.status} | Skor Verifikasi: ${s.verificationScore}% | Latensi: ${s.latencyMs}ms\n`;
+          });
         }
         if (engineResult.realOutput || engineResult.output || engineResult.data) {
           const rawData = engineResult.realOutput || engineResult.output || engineResult.data;
@@ -609,13 +702,12 @@ export class NavixOrchestrator {
         notify("supervisor_state", "done", "COMPLETED");
         notify("thinking_completed", "done", "Task Completed");
 
-        let responseText = data.text;
+        let responseText = data.text || '';
         
-        // Connect Deliberation Card to Main Chat if council verdict was produced
-        if (boosterData?.council && !responseText.includes('```json deliberation') && !responseText.includes('```deliberation')) {
-          responseText = `\`\`\`json deliberation\n${JSON.stringify(boosterData.council, null, 2)}\n\`\`\`\n\n` + responseText;
-        }
-
+        // Strict Anti-Internal-Context-Leakage Filter:
+        // Strip any echoed internal control metadata tags, debug prompts, or internal directives
+        responseText = sanitizeUserDelivery(responseText);
+        
         // Connect Signal Card to Main Chat if retail trader or signal engine produced real trading signals
         if (engineResult?.data?.instantSignalEligibility && !responseText.includes('```json signal') && !responseText.includes('```signal')) {
           const sig = engineResult.data;
