@@ -226,9 +226,32 @@ export class ToolSelector {
         { name: 'VisionEngine', type: 'NAVIX_CORE' },
         { name: 'DocumentEngine', type: 'NAVIX_CORE' }
       ],
+      'visual_reasoning': [
+        { name: 'VisionEngine', type: 'NAVIX_CORE' },
+        { name: 'DocumentEngine', type: 'NAVIX_CORE' }
+      ],
       'ocr': [
         { name: 'VisionEngine', type: 'NAVIX_CORE' },
         { name: 'DocumentEngine', type: 'NAVIX_CORE' }
+      ],
+      'chart_understanding': [
+        { name: 'VisionEngine', type: 'NAVIX_CORE' },
+        { name: 'SignalEngine', type: 'NAVIX_CORE' }
+      ],
+      'chart_analysis': [
+        { name: 'VisionEngine', type: 'NAVIX_CORE' },
+        { name: 'SignalEngine', type: 'NAVIX_CORE' }
+      ],
+      'spatial_reasoning': [
+        { name: 'VisionEngine', type: 'NAVIX_CORE' }
+      ],
+      'ui_understanding': [
+        { name: 'VisionEngine', type: 'NAVIX_CORE' },
+        { name: 'CodingEngine', type: 'NAVIX_CORE' }
+      ],
+      'diagram_interpretation': [
+        { name: 'VisionEngine', type: 'NAVIX_CORE' },
+        { name: 'CodingEngine', type: 'NAVIX_CORE' }
       ],
       'math': [
         { name: 'MathEngine', type: 'NAVIX_CORE' },

@@ -1,3 +1,5 @@
+import { rotateFetch } from '../lib/apiKeyRotator';
+
 export class VertexService {
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -17,7 +19,7 @@ export class VertexService {
       const preferredEngine = localStorage.getItem('ncp_image_engine') || 'vertex';
       const requestPayload = { prompt: cleanPrompt, aspectRatio, preferredEngine };
       
-      const res = await fetch('/api/vertex-generate-image', {
+      const res = await rotateFetch('/api/vertex-generate-image', {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify(requestPayload)
@@ -66,7 +68,7 @@ export class VertexService {
     const startTime = performance.now();
     try {
       console.log(`[VertexService] 🚀 Initiating Video Generation Request: "${prompt.substring(0, 50)}..."`);
-      const res = await fetch('/api/generate-video/start', {
+      const res = await rotateFetch('/api/generate-video/start', {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({ prompt })

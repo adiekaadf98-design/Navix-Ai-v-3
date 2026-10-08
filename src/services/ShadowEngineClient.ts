@@ -1,6 +1,8 @@
+import { rotateFetch } from '../lib/apiKeyRotator';
+
 export class ShadowEngineClient {
     public static async generate(request: any): Promise<any> {
-        const res = await fetch('/api/v1/generate', {
+        const res = await rotateFetch('/api/v1/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(request)
@@ -13,7 +15,7 @@ export class ShadowEngineClient {
         return new Promise((resolve, reject) => {
             const interval = setInterval(async () => {
                 try {
-                    const res = await fetch(`/api/v1/job-status/${jobId}`);
+                    const res = await rotateFetch(`/api/v1/job-status/${jobId}`);
                     if (!res.ok) throw new Error('Failed to fetch job status');
                     const data = await res.json();
                     

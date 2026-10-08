@@ -1,37 +1,21 @@
 import { pineconeClient } from '../database/pinecone-client';
 import { logger } from '../utils/logger';
-import { GoogleGenAI } from '@google/genai';
+import { serverKeyRotator } from '../../services/ServerKeyRotator';
 
 /**
  * NAVIX Knowledge Engine (RAG System)
  * Handles ingestion of documents, vectorization, and knowledge retrieval.
  */
 export class KnowledgeEngine {
-  private aiClient: GoogleGenAI | null = null;
-
-  constructor() {
-    if (process.env.GEMINI_API_KEY) {
-      const apiKey = process.env.GEMINI_API_KEY.trim();
-      this.aiClient = new GoogleGenAI({
-        httpOptions: {
-          headers: {
-            "x-goog-api-key": apiKey,
-            "User-Agent": "aistudio-build",
-          },
-        },
-      });
-    }
-  }
-
   async ingestDocument(docId: string, text: string, metadata: any = {}) {
     logger.info(`Ingesting document to Knowledge Engine: ${docId}`);
     try {
-      if (!this.aiClient) throw new Error("Gemini API Client not initialized for embeddings.");
-      
-      // Get embeddings for the document chunk using text-embedding-004
-      const response = await this.aiClient.models.embedContent({
-        model: 'text-embedding-004',
-        contents: text,
+      // Get embeddings for the document chunk using text-embedding-004 via API Key Router
+      const response = await serverKeyRotator.executeWithRotation({}, async (aiClient) => {
+        return await aiClient.models.embedContent({
+          model: 'text-embedding-004',
+          contents: text,
+        });
       });
 
       const vector = response.embeddings?.[0]?.values;
@@ -51,14 +35,12 @@ export class KnowledgeEngine {
   async searchKnowledge(query: string, topK: number = 3) {
     logger.info(`Searching Knowledge Engine for: ${query}`);
     try {
-      if (!this.aiClient) {
-         throw new Error('Knowledge Engine is not configured: GEMINI_API_KEY is required for embeddings.');
-      }
-
-      // 1. Embed the search query
-      const response = await this.aiClient.models.embedContent({
-        model: 'text-embedding-004',
-        contents: query,
+      // 1. Embed the search query via API Key Router
+      const response = await serverKeyRotator.executeWithRotation({}, async (aiClient) => {
+        return await aiClient.models.embedContent({
+          model: 'text-embedding-004',
+          contents: query,
+        });
       });
 
       const queryVector = response.embeddings?.[0]?.values;

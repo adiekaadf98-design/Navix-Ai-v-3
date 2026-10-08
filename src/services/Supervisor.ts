@@ -93,6 +93,8 @@ export interface Subtask {
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
   output?: any;
   verificationStatus?: 'UNVERIFIED' | 'PASS' | 'FAIL';
+  error?: string;
+  completedAt?: number;
 }
 
 export class TaskDecomposer {

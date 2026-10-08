@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { serverKeyRotator } from '../../services/ServerKeyRotator';
 
 export interface CapabilityStatus {
     provider: string;
@@ -15,19 +15,6 @@ export interface CapabilityStatus {
 
 export class CapabilityRegistryService {
     private capabilities: Map<string, CapabilityStatus> = new Map();
-    private ai: GoogleGenAI;
-
-    constructor() {
-        const apiKey = (process.env.GEMINI_API_KEY || '').trim();
-        this.ai = new GoogleGenAI({ 
-            httpOptions: { 
-                headers: { 
-                    "x-goog-api-key": apiKey,
-                    "User-Agent": "aistudio-build" 
-                } 
-            }
-        });
-    }
 
     public registerCapability(pipelineType: string, status: CapabilityStatus) {
         this.capabilities.set(pipelineType, status);
@@ -46,11 +33,13 @@ export class CapabilityRegistryService {
     }
 
     public async discoverCapabilities() {
-        console.log("Starting Capability Discovery Audit...");
+        console.log("Starting Capability Discovery Audit via API Key Router...");
 
-        // 1. TEXT_TO_TEXT
+        // 1. TEXT_TO_TEXT via API Key Router
         try {
-            await this.ai.models.generateContent({ model: 'gemini-3.8-flash', contents: 'ping' });
+            await serverKeyRotator.executeWithRotation({}, async (aiClient) => {
+                return await aiClient.models.generateContent({ model: 'gemini-3.8-flash', contents: 'ping' });
+            });
             this.registerCapability('TEXT_TO_TEXT', {
                 provider: 'google', model_id: 'gemini-3.8-flash', input_capabilities: ['text'], output_capabilities: ['text'],
                 free_tier: true, quota_status: 'AVAILABLE', verified: true, last_verified: Date.now(), error_code: null, status: 'VERIFIED_FREE'

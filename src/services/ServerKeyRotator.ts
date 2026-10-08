@@ -64,14 +64,36 @@ class ServerKeyRotatorManager {
     }
   }
 
+  public removeKey(keyToRemove: string) {
+    const clean = (keyToRemove || '').trim().replace(/['"\s]/g, '');
+    this.keyPool = this.keyPool.filter(k => k.key !== clean);
+  }
+
   public getActiveKeys(customKey?: string): string[] {
     this.checkCooldowns();
+    if (customKey && customKey.trim().length > 10) {
+      const cleanCustom = customKey.trim().replace(/['"\s]/g, '');
+      const existing = this.keyPool.find(k => k.key === cleanCustom);
+      if (!existing) {
+        this.keyPool.unshift({
+          key: cleanCustom,
+          status: 'active',
+          errorCount: 0
+        });
+      }
+    }
+
     const active = this.keyPool
       .filter(k => k.status === 'active')
       .map(k => k.key);
 
     if (customKey && customKey.trim().length > 10) {
-      return [customKey.trim(), ...active.filter(k => k !== customKey.trim())];
+      const cleanCustom = customKey.trim().replace(/['"\s]/g, '');
+      const item = this.keyPool.find(k => k.key === cleanCustom);
+      if (item && item.status === 'active') {
+        return [cleanCustom, ...active.filter(k => k !== cleanCustom)];
+      }
+      return active.filter(k => k !== cleanCustom);
     }
 
     if (active.length === 0 && typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) {
@@ -114,7 +136,7 @@ class ServerKeyRotatorManager {
 
     const isZeroLimit = msg.includes('limit: 0') || msg.includes('quota exceeded for metric');
 
-    if (status === 429 || msg.includes('resource_exhausted') || msg.includes('quota') || msg.includes('rate limit')) {
+    if (status === 429 || msg.includes('resource_exhausted') || msg.includes('quota') || msg.includes('rate limit') || status === 503 || msg.includes('unavailable') || msg.includes('high demand')) {
       return { isError: true, type: 'quota', message: err?.message || 'Quota Exhausted', isZeroLimit };
     }
     if (status === 401 || status === 403 || msg.includes('api_key_invalid') || msg.includes('permission_denied') || msg.includes('unauthorized') || msg.includes('api key not valid')) {
@@ -127,7 +149,20 @@ class ServerKeyRotatorManager {
     reqOrKey: any,
     actionFn: (ai: GoogleGenAI, apiKey: string) => Promise<T>
   ): Promise<T> {
-    const availableKeys = this.getActiveKeys();
+    if (reqOrKey?.headers?.['x-custom-api-pool']) {
+      const poolKeys = (reqOrKey.headers['x-custom-api-pool'] as string)
+        .split(',')
+        .map(k => k.trim())
+        .filter(k => k.length > 10);
+      if (poolKeys.length > 0) {
+        this.refreshPool(poolKeys);
+      }
+    }
+
+    const customKey = reqOrKey?.headers 
+      ? (reqOrKey.headers['x-custom-api-key'] as string)
+      : (typeof reqOrKey === 'string' ? reqOrKey : undefined);
+    const availableKeys = this.getActiveKeys(customKey);
 
     const envKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY || '').trim();
     if (envKey && !availableKeys.includes(envKey)) {
@@ -161,7 +196,7 @@ class ServerKeyRotatorManager {
         const errInfo = this.isQuotaOrAuthError(err);
         if (errInfo.isError) {
           const maskedKey = apiKey.length > 8 ? `${apiKey.substring(0, 6)}...${apiKey.slice(-3)}` : 'Key';
-          console.log(`[SERVER KEY ROTATOR] ${maskedKey} (${errInfo.type}: ${errInfo.message}). Switching to key index ${attempt + 1}...`);
+          console.log(`[API KEY ROUTER] ${maskedKey} (${errInfo.type}: ${errInfo.message}). Switching to key index ${attempt + 1}...`);
           if (!errInfo.isZeroLimit) {
             this.markKeyStatus(apiKey, errInfo.type, errInfo.message);
           }

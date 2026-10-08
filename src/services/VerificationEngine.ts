@@ -228,6 +228,34 @@ export class VerificationEngine {
         break;
       }
 
+      case 'vision':
+      case 'visual_reasoning':
+      case 'ocr':
+      case 'chart_understanding':
+      case 'chart_analysis': {
+        const visualText = dataObj?.visualSummary || dataObj?.neuralAnalysis || dataObj?.analysis || (typeof dataObj === 'string' ? dataObj : '');
+        const hasValidText = typeof visualText === 'string' && visualText.trim().length > 15;
+        const isFailed = output.status === 'FAILED' || output.status === 'error';
+
+        if (isFailed || !hasValidText) {
+          result.passed = false;
+          result.score = 20;
+          result.issues.push(output.error || output.message || 'Vision analysis output incomplete or missing empirical visual summary.');
+          result.evidence = 'Visual analysis failed or produced empty reasoning payload.';
+        } else if (visualText.includes('PLACEHOLDER_NOT_REAL') || visualText.includes('MOCK_INSPECTION')) {
+          result.passed = false;
+          result.score = 30;
+          result.issues.push('Vision verification rejected: synthetic or mock observation detected.');
+          result.evidence = 'Non-empirical vision payload rejected.';
+        } else {
+          const confidence = typeof dataObj?.confidence === 'number' ? dataObj.confidence : 95.0;
+          const patternsCount = Array.isArray(dataObj?.patterns) ? dataObj.patterns.length : 0;
+          result.score = 100;
+          result.evidence = `Vision intelligence verified: ${visualText.slice(0, 80)}... [Confidence: ${confidence}%, Patterns: ${patternsCount}]`;
+        }
+        break;
+      }
+
       case 'video': {
         const isProcessing = dataObj?.lifecycle === 'PROCESSING' || output.status === 'PROCESSING' || dataObj?.isArtifactReady === false;
         if (isProcessing) {

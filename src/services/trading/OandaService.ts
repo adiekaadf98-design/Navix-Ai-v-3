@@ -17,7 +17,7 @@ export interface OandaPriceQuote {
   low24h: number;
   changePercent24h: number;
   timestamp: string;
-  source: 'OANDA_V20_LIVE' | 'OANDA_FEED_SYNCED';
+  source: 'OANDA_V20_LIVE' | 'OANDA_FEED_SYNCED' | 'YAHOO_FUTURES_PROXY' | 'YAHOO_FEED_SYNCED';
 }
 
 export interface OandaCandle {
@@ -229,7 +229,7 @@ class OandaIntegrationService {
           return {
             symbol: pairKey,
             instrument,
-            displayName: pairKey === 'XAU/USD' ? 'Gold / USD (OANDA Spot Feed)' : `${pairKey} (OANDA Feed)`,
+            displayName: pairKey === 'XAU/USD' ? 'Gold Futures (COMEX GC=F Proxy)' : `${pairKey} (Yahoo Feed)`,
             bid,
             ask,
             mid: midPrice,
@@ -238,7 +238,7 @@ class OandaIntegrationService {
             low24h: low,
             changePercent24h: change,
             timestamp,
-            source: 'OANDA_FEED_SYNCED'
+            source: pairKey === 'XAU/USD' ? 'YAHOO_FUTURES_PROXY' : 'YAHOO_FEED_SYNCED'
           };
         }
       }

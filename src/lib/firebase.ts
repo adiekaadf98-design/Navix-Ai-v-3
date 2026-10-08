@@ -81,6 +81,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
       hasLoggedQuotaError = true;
       console.info('[Navix Cloud Firestore] Daily write quota limit reached for free tier. Seamlessly persisting via local storage.');
     }
+  } else if (!auth.currentUser) {
+    // Unauthenticated guest mode: session is safely stored in local storage
+    console.debug('[Navix Cloud Firestore] Guest session active, persisting via local storage.');
   } else {
     console.warn('[Navix Firestore Error]:', JSON.stringify(errInfo));
   }

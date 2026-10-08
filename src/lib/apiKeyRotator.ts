@@ -11,6 +11,14 @@ const STORAGE_KEYS_LIST = 'navix_gemini_api_keys';
 
 // Load keys from localStorage with automatic cooldown recovery (60 seconds)
 export function getRotationKeys(): KeyItem[] {
+  if (typeof localStorage === 'undefined') {
+    const envKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ? process.env.GEMINI_API_KEY.trim() : '';
+    if (envKey) {
+      return [{ key: envKey, status: 'active', errorCount: 0, lastUsed: Date.now() }];
+    }
+    return [];
+  }
+
   try {
     const raw = localStorage.getItem(STORAGE_KEYS_LIST);
     if (raw) {
@@ -43,16 +51,20 @@ export function getRotationKeys(): KeyItem[] {
   }
 
   // Fallback: Check if there's an old single key saved
-  const oldKey = localStorage.getItem('navix_gemini_api_key');
-  if (oldKey) {
-    const fallbackList: KeyItem[] = [{
-      key: oldKey,
-      status: 'active',
-      errorCount: 0,
-      lastUsed: Date.now()
-    }];
-    saveRotationKeys(fallbackList);
-    return fallbackList;
+  try {
+    const oldKey = localStorage.getItem('navix_gemini_api_key');
+    if (oldKey) {
+      const fallbackList: KeyItem[] = [{
+        key: oldKey,
+        status: 'active',
+        errorCount: 0,
+        lastUsed: Date.now()
+      }];
+      saveRotationKeys(fallbackList);
+      return fallbackList;
+    }
+  } catch (err) {
+    // Ignore fallback read errors
   }
 
   return [];
@@ -60,6 +72,7 @@ export function getRotationKeys(): KeyItem[] {
 
 // Save keys to localStorage
 export function saveRotationKeys(keys: KeyItem[]): void {
+  if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEYS_LIST, JSON.stringify(keys));
   } catch (err) {
@@ -95,8 +108,12 @@ export function getActiveApiKey(): string | null {
 
 // Get all valid keys as comma-separated string for multi-key pool header (up to 100)
 export function getAllActiveKeysHeader(): string | null {
-  // Deliberately never expose API keys to network requests. Keys are server-owned secrets.
-  return null;
+  const keys = getRotationKeys().filter(k => k.status === 'active').map(k => k.key);
+  if (keys.length > 0) {
+    return keys.join(',');
+  }
+  const activeKey = getActiveApiKey();
+  return activeKey || null;
 }
 
 // Mark a key with a specific status
@@ -156,7 +173,7 @@ function isQuotaOrAuthError(status: number, responseBody: any): { isError: boole
     return {
       isError: true,
       type: 'exhausted',
-      message: responseBody.error?.message || responseBody.error || 'Quota / Limit Habis (429)'
+      message: responseBody?.error?.message || responseBody?.error || 'Quota / Limit Habis (429)'
     };
   }
 
@@ -164,7 +181,7 @@ function isQuotaOrAuthError(status: number, responseBody: any): { isError: boole
     return {
       isError: true,
       type: 'invalid',
-      message: responseBody.error?.message || responseBody.error || 'API Key Tidak Valid (401)'
+      message: responseBody?.error?.message || responseBody?.error || 'API Key Tidak Valid (401)'
     };
   }
 
@@ -173,24 +190,49 @@ function isQuotaOrAuthError(status: number, responseBody: any): { isError: boole
 
 // Enhanced fetch wrapper with high-speed key rotation and resilient timeout guard
 export async function rotateFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(options.headers || {});
-  headers.delete('x-custom-api-key');
   const token = typeof localStorage !== 'undefined' ? (localStorage.getItem('navix_auth_token') || localStorage.getItem('navix_token')) : null;
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-
+  const rotationPool = getRotationKeys();
+  const maxRetries = Math.max(2, rotationPool.length);
   let lastError: any = null;
-  const maxRetries = 2;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const activeKey = getActiveApiKey();
+    const headers = new Headers(options.headers || {});
+    if (activeKey) {
+      headers.set('x-custom-api-key', activeKey);
+    }
+    const poolHeader = getAllActiveKeysHeader();
+    if (poolHeader) {
+      headers.set('x-custom-api-pool', poolHeader);
+    }
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    console.log(`[API KEY ROUTER] Routing request to ${url} (Active Key: ${activeKey ? activeKey.substring(0, 6) + '...' : 'System Pool'})`);
+
     try {
       const response = await fetch(url, { ...options, headers, signal: options.signal || AbortSignal.timeout(90000) });
+      
+      // If server returned quota exhaustion (429) or unauthorized (401), rotate key if custom key was used
+      if ((response.status === 429 || response.status === 401) && activeKey) {
+        console.warn(`[API KEY ROUTER] Response ${response.status} for key (${activeKey.substring(0, 6)}...). Rotating to next key...`);
+        updateKeyStatus(activeKey, response.status === 429 ? 'exhausted' : 'invalid', `HTTP ${response.status}`);
+        if (attempt < maxRetries) {
+          continue;
+        }
+      }
+
       return response;
     } catch (fetchErr: any) {
       lastError = fetchErr;
       console.warn(`[rotateFetch] Attempt ${attempt + 1}/${maxRetries + 1} failed:`, fetchErr?.message || fetchErr);
+      if (activeKey) {
+        updateKeyStatus(activeKey, 'exhausted', fetchErr?.message || 'Network error');
+      }
       if (attempt < maxRetries) {
         // Short pause before retrying network request
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
       }
     }
   }

@@ -15,6 +15,8 @@ import { ChatSession, ChatMessage, Attachment, NavixAppView } from './types';
 import { orchestrator } from './services/Orchestrator';
 import { classifyTask, decideEffort, buildToolBudget, createTaskPlan, EffortLevel, isHeavyTask } from './services/ThinkingEngine';
 import { firestoreSync } from './services/firestoreSync';
+import { auth } from './lib/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { QuotaService } from './services/quotaService';
 import { showToast } from './utils/toast';
 import { safeLocalStorage } from './utils/safeStorage';
@@ -75,7 +77,27 @@ function MainChatApp() {
   }, [thinkingMode]);
 
   const currentSession = sessions.find((s) => s.id === currentSessionId) || sessions[0];
-  useEffect(() => { const unsub = firestoreSync.subscribeToSessions((cloudSessions) => { if (cloudSessions?.length) setSessions(cloudSessions); }); firestoreSync.loadAllSessions().then((cloudSessions) => { if (cloudSessions?.length) setSessions(cloudSessions); }).catch(() => {}); return () => unsub?.(); }, []);
+  useEffect(() => {
+    let unsubFirestore: (() => void) | null = null;
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (unsubFirestore) {
+        unsubFirestore();
+        unsubFirestore = null;
+      }
+      if (user) {
+        unsubFirestore = firestoreSync.subscribeToSessions((cloudSessions) => {
+          if (cloudSessions?.length) setSessions(cloudSessions);
+        });
+        firestoreSync.loadAllSessions().then((cloudSessions) => {
+          if (cloudSessions?.length) setSessions(cloudSessions);
+        }).catch(() => {});
+      }
+    });
+    return () => {
+      unsubAuth();
+      if (unsubFirestore) unsubFirestore();
+    };
+  }, []);
   useEffect(() => { try { safeLocalStorage.setItem('navix_chat_sessions', JSON.stringify(sessions.map((s) => ({ ...s, messages: s.messages.slice(-50).map((m) => ({ ...m, attachments: m.attachments?.map((a) => a.data && a.data.length > 500000 ? { ...a, data: undefined } : a) })) })))); } catch {} }, [sessions]);
   const handleNewChat = () => { const next = { id: Date.now().toString(), title: 'Obrolan Baru', messages: [], updatedAt: new Date() }; setSessions((current) => [next, ...current]); setCurrentSessionId(next.id); setCurrentView('chat'); firestoreSync.saveSession(next).catch(() => {}); };
   const handleDeleteSession = (id: string, e: React.MouseEvent) => { e.stopPropagation(); firestoreSync.deleteSession(id).catch(() => {}); setSessions((current) => { const next = current.filter((s) => s.id !== id); if (currentSessionId === id && next[0]) setCurrentSessionId(next[0].id); return next.length ? next : [{ id: Date.now().toString(), title: 'Obrolan Baru', messages: [], updatedAt: new Date() }]; }); };

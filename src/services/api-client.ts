@@ -1,7 +1,9 @@
-// Minimal fetch-based API client for preview environment compatibility
-// Using native fetch instead of Axios for zero-dependency lightness in client core
+import { rotateFetch } from '../lib/apiKeyRotator';
 
-const getAuthToken = () => localStorage.getItem('navix_auth_token') || localStorage.getItem('navix_token');
+// Minimal fetch-based API client for preview environment compatibility
+// Using rotateFetch (API Key Router) for resilient key-rotated requests
+
+const getAuthToken = () => typeof localStorage !== 'undefined' ? (localStorage.getItem('navix_auth_token') || localStorage.getItem('navix_token')) : null;
 
 export class ApiClient {
   static async request<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -9,7 +11,6 @@ export class ApiClient {
       'Content-Type': 'application/json',
       ...((options.headers as Record<string, string>) || {})
     };
-
 
     const token = getAuthToken();
     if (token) {
@@ -22,7 +23,7 @@ export class ApiClient {
     };
 
     try {
-      const response = await fetch(endpoint, config);
+      const response = await rotateFetch(endpoint, config);
       const data = await response.json();
 
       if (!response.ok) {

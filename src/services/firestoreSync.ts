@@ -112,15 +112,12 @@ class FirestoreSyncService {
   }
 
   /**
-   * Get effective user identifier for Firestore scoping
+   * Get effective user identifier for Firestore scoping.
+   * Strictly requires an authenticated Firebase user to satisfy Firestore security rules.
    */
   public getUserId(): string | null {
     if (auth.currentUser?.uid) {
       return auth.currentUser.uid;
-    }
-    const localUser = AuthService.getCurrentUser();
-    if (localUser?.id) {
-      return localUser.id;
     }
     return null;
   }
@@ -129,7 +126,7 @@ class FirestoreSyncService {
    * Check if Firestore cloud sync is active
    */
   public isCloudReady(): boolean {
-    return !!this.getUserId();
+    return !!auth.currentUser?.uid;
   }
 
   /**

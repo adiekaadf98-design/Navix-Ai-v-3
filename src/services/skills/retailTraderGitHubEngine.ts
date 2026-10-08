@@ -502,10 +502,18 @@ export class RetailTraderGitHubEngine implements IEngine {
   async execute(payload: any): Promise<EngineResult> {
     try {
       const symbol = payload.symbol || payload.pair || 'XAUUSD';
-      const livePrice = Number(payload.livePrice || payload.price || 2890.0);
+      const livePrice = Number(payload.livePrice || payload.price);
+      if (!livePrice || isNaN(livePrice) || livePrice <= 0 || payload.isSimulation || payload.isMock || payload.isBacktest) {
+        return {
+          status: 'error',
+          source: this.name,
+          message: `RetailTraderGitHubEngine menolak data tanpa live market price tervalidasi (${symbol}). Data synthetic, mock, atau simulation tidak diizinkan sebagai current price.`,
+          timestamp: Date.now()
+        };
+      }
       const timeframe = payload.timeframe || '15m';
 
-      const signal = generateRetailTraderSignal(symbol, livePrice, timeframe);
+      const signal = generateRetailTraderSignal(symbol, livePrice, timeframe, payload.recentCandles);
 
       return {
         status: 'success',

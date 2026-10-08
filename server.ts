@@ -29,8 +29,17 @@ function getAiClient(req: express.Request, overrideKey?: string): GoogleGenAI {
 
 function getAiClientWithKey(req: express.Request, overrideKey?: string): { client: GoogleGenAI, key: string } {
   const customKeyHeader = req.headers['x-custom-api-key'] as string;
+  const poolHeader = req.headers['x-custom-api-pool'] as string;
+  if (poolHeader) {
+    const poolKeys = poolHeader.split(',').map(k => k.trim()).filter(k => k.length > 10);
+    if (poolKeys.length > 0) {
+      serverKeyRotator.refreshPool(poolKeys);
+    }
+  }
   const activeKeys = serverKeyRotator.getActiveKeys(customKeyHeader);
   const apiKey = (overrideKey || activeKeys[0] || process.env.GEMINI_API_KEY || '').trim();
+  const masked = apiKey.length > 8 ? `${apiKey.substring(0, 6)}...${apiKey.slice(-3)}` : 'DefaultKey';
+  console.log(`[API KEY ROUTER] Connected: routing AI request via key (${masked}) | Pool Active: ${activeKeys.length}`);
   const client = new GoogleGenAI({
     apiKey: apiKey,
     httpOptions: {
@@ -561,9 +570,36 @@ async function startServer() {
         // Fallback to Yahoo
       }
 
-      // 2. Try Yahoo
+      // 2. Try TradingView CFD Scanner for Spot Gold (XAUUSD)
+      if (cleanSymbol === 'XAUUSD' || cleanSymbol === 'GOLD') {
+        try {
+          const tvRes = await fetch('https://scanner.tradingview.com/cfd/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbols: { tickers: ["OANDA:XAUUSD", "FX:XAUUSD", "TVC:GOLD"] }, columns: ["close"] }),
+            signal: AbortSignal.timeout(5000)
+          });
+          if (tvRes.ok) {
+            const data = await tvRes.json();
+            if (data?.data?.length > 0 && typeof data.data[0].d?.[0] === 'number') {
+              res.setHeader('Content-Type', 'application/json');
+              return res.json({
+                symbol: 'XAUUSD',
+                instrument: 'XAU/USD (Spot Gold)',
+                price: data.data[0].d[0],
+                marketSource: 'TradingView (OANDA:XAUUSD Live Spot)',
+                isSpotXauUsd: true
+              });
+            }
+          }
+        } catch (e) {
+          // Fall through
+        }
+      }
+
+      // 3. Try Yahoo
       let yahooSym = cleanSymbol;
-      if (cleanSymbol === 'XAUUSD' || cleanSymbol === 'GOLD') yahooSym = 'GC=F';
+      if (cleanSymbol === 'XAUUSD' || cleanSymbol === 'GOLD' || cleanSymbol === 'GC=F') yahooSym = 'GC=F';
       else if (cleanSymbol === 'EURUSD') yahooSym = 'EURUSD=X';
       else if (cleanSymbol === 'GBPUSD') yahooSym = 'GBPUSD=X';
       else if (cleanSymbol === 'USDJPY') yahooSym = 'USDJPY=X';
@@ -577,11 +613,15 @@ async function startServer() {
         const meta = yData.chart?.result?.[0]?.meta;
         const p = meta?.regularMarketPrice;
         if (typeof p === 'number') {
+          const isGoldFutures = cleanSymbol === 'XAUUSD' || cleanSymbol === 'GOLD' || cleanSymbol === 'GC=F';
           res.setHeader('Content-Type', 'application/json');
           return res.json({
-            symbol: cleanSymbol,
+            symbol: isGoldFutures ? 'GC=F' : cleanSymbol,
+            instrument: isGoldFutures ? 'COMEX Gold Futures (GC=F Proxy)' : cleanSymbol,
             price: p,
-            marketSource: 'Yahoo Finance'
+            marketSource: isGoldFutures ? 'Yahoo Finance (Gold Futures Proxy)' : 'Yahoo Finance',
+            isSpotXauUsd: !isGoldFutures,
+            ...(isGoldFutures ? { note: 'Harga berasal dari instrumen Gold Futures (GC=F), bukan Spot Gold XAU/USD.' } : {})
           });
         }
       }
@@ -727,6 +767,31 @@ async function startServer() {
     } catch (err: any) {
       console.error("Gemini API key test failed:", err);
       res.json({ success: false, error: err?.message || String(err) });
+    }
+  });
+
+  // Admin Keys Sync & Management for ServerKeyRotator
+  app.post("/api/admin/keys", (req, res) => {
+    try {
+      const { keys } = req.body;
+      if (Array.isArray(keys) && keys.length > 0) {
+        serverKeyRotator.refreshPool(keys);
+      }
+      res.json({ success: true, stats: serverKeyRotator.getStats() });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
+    }
+  });
+
+  app.delete("/api/admin/keys", (req, res) => {
+    try {
+      const { key } = req.body;
+      if (key) {
+        serverKeyRotator.removeKey(key);
+      }
+      res.json({ success: true, stats: serverKeyRotator.getStats() });
+    } catch (e: any) {
+      res.status(500).json({ success: false, error: e.message });
     }
   });
 
@@ -1104,7 +1169,7 @@ async function startServer() {
         return res.status(429).json({ error: shieldValidation.reason || "Security Shield limit exceeded" });
       }
 
-      const { message, attachments, disableTts, model, history = [] } = req.body;
+      const { message, attachments, disableTts, model, history = [], taskCategory } = req.body;
       
       if (!message && (!attachments || attachments.length === 0)) {
         return res.status(400).json({ error: "Message or attachment is required" });
@@ -1120,9 +1185,7 @@ async function startServer() {
         chosenModel = "gemini-3.6-flash";
       }
 
-      const tools: any = [
-        {
-          functionDeclarations: [
+      const allFunctionDeclarations: any[] = [
             {
               name: "get_crypto_data",
               description: "Mesin Analisis Kripto: Mengambil data harga realtime dan klines (candlesticks) untuk aset Kripto dari Binance. Gunakan ini saat pengguna meminta analisis kripto (misal: BTC, ETH).",
@@ -1325,9 +1388,48 @@ async function startServer() {
                 required: ["serverName", "toolName"]
               }
             }
-          ]
-        }
       ];
+
+      // UPDATE 1 — SELECTIVE TOOL DECLARATION
+      // Filter function declarations based on taskCategory / domain intent so that the LLM only receives capabilities needed for the task
+      const rawCategory = String(taskCategory || '').toUpperCase();
+      const msgLower = String(message || '').toLowerCase();
+
+      const isTrading = rawCategory === 'TRADING' || rawCategory === 'CRYPTO' || rawCategory === 'FOREX' || rawCategory === 'GOLD' || msgLower.includes('trading') || msgLower.includes('saham') || msgLower.includes('crypto') || msgLower.includes('kripto') || msgLower.includes('forex') || msgLower.includes('gold') || msgLower.includes('xau') || msgLower.includes('btcusdt') || msgLower.includes('ethusdt') || msgLower.includes('eurusd');
+      const isMedia = rawCategory === 'MEDIA' || rawCategory === 'IMAGE' || rawCategory === 'VIDEO' || rawCategory === 'AUDIO' || msgLower.includes('gambar') || msgLower.includes('lukis') || msgLower.includes('foto') || msgLower.includes('video') || msgLower.includes('lagu') || msgLower.includes('musik');
+      const isDoc = rawCategory === 'DOCUMENT' || msgLower.includes('dokumen') || msgLower.includes('pdf') || msgLower.includes('buat artikel') || msgLower.includes('koreksi kosa kata');
+      const isMath = rawCategory === 'MATH' || (/^\s*hitung|\bmatematika\b|\bkalkulasi\b/i.test(msgLower) && !isTrading);
+      const isTracker = rawCategory === 'TRACKER' || msgLower.includes('radar') || msgLower.includes('lacak') || msgLower.includes('tracker');
+      const isCode = rawCategory === 'CODE' || msgLower.includes('kode') || msgLower.includes('coding') || msgLower.includes('debug') || msgLower.includes('github') || msgLower.includes('repositori') || msgLower.includes('mcp');
+
+      let activeDeclarations = allFunctionDeclarations;
+
+      if (isMath) {
+        // Pure math: 0 function declarations needed (deterministic calculation already performed or direct answer)
+        activeDeclarations = [];
+      } else if (isTrading) {
+        activeDeclarations = allFunctionDeclarations.filter(d => 
+          ['get_crypto_data', 'get_forex_data', 'get_gold_data', 'get_retail_trading_signal', 'execute_github_engine'].includes(d.name)
+        );
+      } else if (isMedia) {
+        activeDeclarations = allFunctionDeclarations.filter(d => 
+          ['generate_image', 'generate_video', 'generate_music'].includes(d.name)
+        );
+      } else if (isDoc) {
+        activeDeclarations = allFunctionDeclarations.filter(d => 
+          ['generate_document', 'search_skills'].includes(d.name)
+        );
+      } else if (isTracker) {
+        activeDeclarations = allFunctionDeclarations.filter(d => 
+          ['generate_tracker'].includes(d.name)
+        );
+      } else if (isCode) {
+        activeDeclarations = allFunctionDeclarations.filter(d => 
+          ['search_skills', 'inspect_github_repo', 'execute_github_engine', 'execute_mcp_skill'].includes(d.name)
+        );
+      }
+
+      const tools: any = activeDeclarations.length > 0 ? [{ functionDeclarations: activeDeclarations }] : undefined;
 
       let fullContents = [...history];
       
@@ -1408,7 +1510,7 @@ ${formattedMultimediaSkills}`,
           });
 
           // Handle Function Calls loop
-          let hasFunctionCalls = aiResponse.functionCalls && aiResponse.functionCalls.length > 0;
+          let hasFunctionCalls = Boolean(tools) && Boolean(aiResponse.functionCalls && aiResponse.functionCalls.length > 0);
           while (hasFunctionCalls) {
              const functionResponses = [];
              const modelContent = aiResponse.candidates?.[0]?.content;
@@ -1459,34 +1561,76 @@ ${formattedMultimediaSkills}`,
                        klines: klinesText 
                      };
                   } else if (call.name === 'get_gold_data') {
-                     let priceFloat = 0;
-                     const tvRes = await fetch('https://scanner.tradingview.com/cfd/scan', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ symbols: { tickers: ["OANDA:XAUUSD", "FX:XAUUSD", "TVC:GOLD"] }, columns: ["close"] })
-                     });
-                     if (tvRes.ok) {
-                        const data = await tvRes.json();
-                        if (data && data.data && data.data.length > 0) priceFloat = data.data[0].d[0];
+                     let spotPrice = 0;
+                     let spotSource = "";
+                     try {
+                        const tvRes = await fetch('https://scanner.tradingview.com/cfd/scan', {
+                           method: 'POST',
+                           headers: { 'Content-Type': 'application/json' },
+                           body: JSON.stringify({ symbols: { tickers: ["OANDA:XAUUSD", "FX:XAUUSD", "TVC:GOLD"] }, columns: ["close"] }),
+                           signal: AbortSignal.timeout(6000)
+                        });
+                        if (tvRes.ok) {
+                           const data = await tvRes.json();
+                           if (data && data.data && data.data.length > 0 && typeof data.data[0].d?.[0] === 'number') {
+                             spotPrice = data.data[0].d[0];
+                             spotSource = "TradingView (OANDA:XAUUSD Live Spot)";
+                           }
+                        }
+                     } catch (e) {
+                        // Spot feed error
                      }
+
                      let gcfPrice = 0;
-                     const yahooRes = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/GC=F`);
-                     if (yahooRes.ok) {
-                        const data = await yahooRes.json();
-                        const price = data.chart.result?.[0]?.meta?.regularMarketPrice;
-                        if (price) gcfPrice = parseFloat(price);
+                     try {
+                        const yahooRes = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/GC=F`, {
+                          signal: AbortSignal.timeout(5000),
+                          headers: { 'User-Agent': 'Mozilla/5.0' }
+                        });
+                        if (yahooRes.ok) {
+                           const data = await yahooRes.json();
+                           const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+                           if (typeof price === 'number') gcfPrice = price;
+                        }
+                     } catch (e) {
+                        // Futures proxy error
                      }
-                     if (!priceFloat && gcfPrice) priceFloat = gcfPrice;
-                     let offset = 0;
-                     if (priceFloat && gcfPrice && priceFloat !== gcfPrice) offset = priceFloat - gcfPrice;
-                     
-                     const klinesText = await getYahooKlinesText("GC=F", offset);
-                     result = { 
-                       status: "success", 
-                       source: "TradingView API & Yahoo Engine",
-                       current_price: priceFloat, 
-                       klines: klinesText 
-                     };
+
+                     if (spotPrice > 0) {
+                        // Spot Gold XAU/USD successfully verified from live exchange feed
+                        const offset = gcfPrice > 0 ? (spotPrice - gcfPrice) : 0;
+                        const klinesText = await getYahooKlinesText("GC=F", offset);
+                        result = { 
+                          status: "success", 
+                          source: spotSource,
+                          instrument: "XAU/USD (Spot Gold)",
+                          is_spot_xauusd: true,
+                          current_price: spotPrice, 
+                          futures_price_gcf: gcfPrice > 0 ? gcfPrice : undefined,
+                          klines: klinesText 
+                        };
+                     } else if (gcfPrice > 0) {
+                        // ONLY COMEX Gold Futures (GC=F) proxy available - DO NOT mislabel as XAU/USD!
+                        const klinesText = await getYahooKlinesText("GC=F", 0);
+                        result = {
+                          status: "partial",
+                          source: "Yahoo Finance (COMEX Gold Futures)",
+                          instrument: "GC=F (COMEX Gold Futures Proxy)",
+                          is_spot_xauusd: false,
+                          futures_price: gcfPrice,
+                          current_price: null,
+                          note: "Data live Spot Gold XAU/USD saat ini tidak dapat diakses dari feed bursa. Harga di atas adalah COMEX Gold Futures (GC=F) dan BUKAN Spot XAU/USD.",
+                          klines: klinesText
+                        };
+                     } else {
+                        result = {
+                          status: "error",
+                          source: "Navix Gold Market Engine",
+                          instrument: "XAU/USD",
+                          error: "LIVE_DATA_UNAVAILABLE",
+                          message: "Gagal memperoleh live price untuk Gold (XAU/USD) dari provider bursa. Tidak ada harga tiruan atau fabrikasi yang diizinkan."
+                        };
+                     }
                   } else if (call.name === 'get_economic_calendar') {
                      const newsText = await getEconomicCalendarText();
                      result = {
@@ -1516,7 +1660,7 @@ ${formattedMultimediaSkills}`,
                          if (yahooRes && yahooRes.ok) {
                             const data = await yahooRes.json();
                             const resultObj = data.chart?.result?.[0];
-                            livePrice = resultObj?.meta?.regularMarketPrice || 2890.0;
+                            livePrice = resultObj?.meta?.regularMarketPrice || 0;
                             const quote = resultObj?.indicators?.quote?.[0];
                             const timestamps = resultObj?.timestamp || [];
                             if (quote && timestamps.length > 0) {
@@ -1558,21 +1702,30 @@ ${formattedMultimediaSkills}`,
                        const yahooRes = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${yahooSymbol}?interval=15m&range=5d`).catch(() => null);
                        if (yahooRes && yahooRes.ok) {
                           const data = await yahooRes.json();
-                          livePrice = data.chart?.result?.[0]?.meta?.regularMarketPrice || 1.0500;
+                          livePrice = data.chart?.result?.[0]?.meta?.regularMarketPrice || 0;
                        }
                      }
 
-                     if (!livePrice) livePrice = symUpper.includes('XAU') ? 2890.0 : symUpper.includes('BTC') ? 95000.0 : 1.0850;
-
-                     const calculatedSignal = generateRetailTraderSignal(symbol, livePrice, timeframe, recentCandles);
-                     result = {
-                       status: "success",
-                       source: "Navix Institutional TradingView & TA-Lib Engine",
-                       symbol,
-                       timeframe,
-                       currentLivePrice: livePrice,
-                       signal: calculatedSignal
-                     };
+                     if (!livePrice || livePrice <= 0) {
+                       result = {
+                         status: "error",
+                         source: "Navix Retail Signal Engine",
+                         symbol,
+                         error: "LIVE_DATA_UNAVAILABLE",
+                         message: `Data live price aktual untuk ${symbol} tidak dapat diverifikasi dari bursa. Perhitungan sinyal ditolak demi mencegah fabrikasi harga.`
+                       };
+                     } else {
+                       const calculatedSignal = generateRetailTraderSignal(symbol, livePrice, timeframe, recentCandles);
+                       result = {
+                         status: "success",
+                         source: "Navix Institutional TradingView & TA-Lib Engine",
+                         symbol,
+                         timeframe,
+                         signalReferencePrice: livePrice,
+                         is_implicit_live_ticker: false,
+                         signal: calculatedSignal
+                       };
+                     }
                    } else if (call.name === 'generate_image') {
                       appendedMedia += '\n```json media\n{ "type": "image", "prompt": ' + JSON.stringify(call.args.prompt || '') + ' }\n```\n';
                       result = { status: 'success', message: 'Mesin Gambar berhasil diaktifkan.' };
@@ -1803,40 +1956,37 @@ Tugas Anda adalah bertindak sebagai ORCHESTRATOR. Berikan laporan hasil dari mes
           
           const isQuotaOrRateLimit = errStr.includes('429') || errStr.includes('RESOURCE_EXHAUSTED') || errStr.includes('quota') || errStr.includes('billing');
           const isServerError = errStr.includes('503') || errStr.includes('UNAVAILABLE') || errStr.includes('high demand');
+          const isAuthError = errStr.includes('401') || errStr.includes('API_KEY_INVALID') || errStr.includes('invalid authentication');
           
-          if (isQuotaOrRateLimit || isServerError) {
-             if (isQuotaOrRateLimit && currentUsedKey) {
-                // If it's a quota limit, mark the key as exhausted so the next iteration will rotate to the next key!
+          if (isQuotaOrRateLimit || isServerError || isAuthError) {
+             if ((isQuotaOrRateLimit || isServerError) && currentUsedKey) {
+                // If it's a quota or server limit, mark key as exhausted so the next iteration rotates
                 serverKeyRotator.markKeyStatus(currentUsedKey, 'exhausted', errStr);
+             } else if (isAuthError && currentUsedKey) {
+                serverKeyRotator.markKeyStatus(currentUsedKey, 'invalid', errStr);
              }
              retries--;
              if (retries === 0) {
                 throw error;
              }
              
-             if (isQuotaOrRateLimit) {
+             if (isQuotaOrRateLimit || isServerError) {
                const fallbackModelsList = [
                   "gemini-3.6-flash",
-                  "gemini-2.5-flash",
-                  "gemini-1.5-flash",
-                  "gemini-1.5-flash-8b",
-                  "gemini-3.1-pro-preview",
-                  "gemini-3.1-flash-lite"
-                ];
+                  "gemini-3.5-flash",
+                  "gemini-3.1-flash-lite",
+                  "gemini-3.1-pro-preview"
+               ];
                let foundFallback = false;
                for (const modelCandidate of fallbackModelsList) {
                  if (!attemptedModels.has(modelCandidate)) {
-                   console.log(`[NavixRouter] Quota limit hit on ${chosenModel}. Switching to fallback model: ${modelCandidate}`);
+                   console.log(`[API KEY ROUTER] Limit/load on ${chosenModel}. Switching to model: ${modelCandidate}`);
                    chosenModel = modelCandidate;
                    foundFallback = true;
                    break;
                  }
                }
                if (!foundFallback) {
-                 chosenModel = "gemini-3.1-flash-lite";
-               }
-             } else if (isServerError) {
-               if (retries <= 3 && chosenModel !== "gemini-3.1-flash-lite") {
                  chosenModel = "gemini-3.1-flash-lite";
                }
              }
@@ -2310,6 +2460,87 @@ Tugas Anda adalah bertindak sebagai ORCHESTRATOR. Berikan laporan hasil dari mes
       res.status(500).json({ success: false, error: errStr });
     }
   };
+
+  // Dedicated Multimodal Vision Intelligence Endpoint (VisionEngine Backend)
+  app.post("/api/analyze-vision", async (req, res) => {
+    try {
+      const { image, prompt, mode = 'general' } = req.body;
+      if (!image) {
+        return res.status(400).json({ success: false, error: "Image input is required for vision analysis" });
+      }
+
+      let inlinePart: any = null;
+      if (typeof image === 'string' && image.startsWith('data:')) {
+        const parsed = parseDataUrl(image);
+        if (parsed) {
+          inlinePart = {
+            inlineData: {
+              mimeType: parsed.mimeType,
+              data: parsed.base64
+            }
+          };
+        }
+      } else if (typeof image === 'string' && image.length > 50 && !image.startsWith('http')) {
+        inlinePart = {
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: image
+          }
+        };
+      }
+
+      if (!inlinePart) {
+        return res.status(400).json({ success: false, error: "Invalid image format for vision analysis" });
+      }
+
+      let visionSystemPrompt = `You are the NAVIX HIGH-PRECISION MULTIMODAL VISION ENGINE.
+Perform comprehensive, empirical visual analysis.
+- If this is a trading chart/candlestick: identify timeframe, trend, candlestick formations (Pinbar, Engulfing, Doji, Hammer), Order Blocks (OB), Fair Value Gaps (FVG), Break of Structure (BOS), and support/resistance price levels with exact numbers visible on axes.
+- If this is a document/receipt/text: perform accurate OCR, extracting text verbatim with structure.
+- If this is a diagram/architecture/UI: extract components, connections, layouts, and data schemas.
+- If this is a real-world object/scene: describe spatial relationships, objects, materials, and fine details.
+Be exact, objective, structured, and avoid speculation. Output your empirical findings clearly.`;
+
+      if (mode === 'chart') {
+        visionSystemPrompt += `\nSTRICT FOCUS: Technical Chart & Candlestick Analysis. Extract asset symbol, timeframe, candlestick patterns, key horizontal levels, and SMC structures.`;
+      } else if (mode === 'ocr') {
+        visionSystemPrompt += `\nSTRICT FOCUS: Optical Character Recognition (OCR). Transcribe all visible text exactly as written, preserving layout, tables, and hierarchy.`;
+      }
+
+      const visionModel = 'gemini-2.5-flash';
+      const promptText = prompt || 'Analyze this image in detail and extract all key information, structures, and data.';
+
+      const result = await serverKeyRotator.executeWithRotation(req, async (aiClient) => {
+        return await aiClient.models.generateContent({
+          model: visionModel,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: visionSystemPrompt },
+                inlinePart,
+                { text: `TASK: ${promptText}` }
+              ]
+            }
+          ]
+        });
+      });
+
+      const analysisText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return res.json({
+        success: true,
+        analysis: analysisText,
+        model: visionModel,
+        mode
+      });
+    } catch (err: any) {
+      console.error("[/api/analyze-vision] Error:", err?.message || err);
+      return res.status(500).json({
+        success: false,
+        error: err?.message || "Vision analysis failed"
+      });
+    }
+  });
 
   app.post("/api/generate-image", handleUniversalImageGeneration);
   app.post("/api/vertex-generate-image", handleUniversalImageGeneration);

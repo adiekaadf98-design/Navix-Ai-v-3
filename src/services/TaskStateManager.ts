@@ -97,12 +97,16 @@ export class TaskStateManager {
 
       const hasFailedSubtask = task.subtasks.some(s => s.status === 'FAILED');
       const hasUnfinishedSubtask = task.subtasks.length > 0 && task.subtasks.some(s => s.status === 'PENDING' || s.status === 'IN_PROGRESS');
-      const verificationFailed = resultDetails?.verificationResults && resultDetails.verificationResults.passed === false;
+      const verificationFailed = resultDetails?.verificationResults && (
+        resultDetails.verificationResults.passed === false ||
+        (resultDetails.verificationResults.score !== undefined && resultDetails.verificationResults.score < 50) ||
+        Object.values(resultDetails.verificationResults).some((v: any) => v && typeof v === 'object' && (v.passed === false || (v.score !== undefined && v.score < 50)))
+      );
 
       if (hasFailedSubtask || verificationFailed || hasUnfinishedSubtask) {
         task.status = 'FAILED';
         const reason = verificationFailed
-          ? `Verification Gate Rejected: ${resultDetails?.verificationResults?.issues?.join('; ') || 'Failed rules'}`
+          ? `Verification Gate Rejected: ${resultDetails?.verificationResults?.issues?.join('; ') || 'Failed verification checks'}`
           : hasFailedSubtask
             ? 'One or more subtasks failed during execution.'
             : 'Execution attempted completion while subtasks were still unfinished.';

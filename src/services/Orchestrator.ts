@@ -307,9 +307,16 @@ export class NavixOrchestrator {
           });
         } catch (engineError: any) {
           console.warn("[Orchestrator] AdaptiveExecutionEngine Warning:", engineError);
-          notify("workflow_step", "error", "Engine Timeout / Fallback Activated");
-          // Fail gracefully by nullifying adaptiveResult so it falls back to default AI processing
-          adaptiveResult = null;
+          notify("workflow_step", "error", "Engine Failure / Fail-Closed Enforced");
+          adaptiveResult = {
+            finalEngineResult: {
+              status: 'FAILED',
+              error: engineError?.message || 'Engine execution failed',
+              message: engineError?.message || 'Mesin spesialis gagal menyelesaikan tugas atau ditolak quality gate.'
+            },
+            engineName: 'AdaptiveExecutionEngine',
+            verification: { passed: false, score: 0, issues: [engineError?.message || 'Engine execution failed'] }
+          };
         }
       }
 
@@ -328,7 +335,7 @@ export class NavixOrchestrator {
 
           const headers: any = { 'Content-Type': 'application/json' };
 
-          const response = await fetch('/api/composite-image', {
+          const response = await rotateFetch('/api/composite-image', {
             method: 'POST',
             headers,
             body: JSON.stringify({ faceUrl, clothesUrl, backgroundUrl, userPrompt, aspectRatio: '1:1' })
@@ -573,33 +580,43 @@ export class NavixOrchestrator {
         messageToSend += `[MANDAT MUTLAK]: Berikan jawaban komprehensif, presisi mutlak, tuntas tanpa disingkat, dan sepenuhnya berbasis bukti faktual nyata tanpa simulasi.\n`;
       }
       if (engineResult && engineName !== 'DefaultEngine' && engineName !== 'AI_DEBATE') {
-        messageToSend += `\n\n[HASIL NYATA EKSEKUSI ENGINE - NAVIX VERIFIED DATA]:\n`;
-        messageToSend += `- Nama Mesin: ${engineName}\n`;
-        messageToSend += `- Status Eksekusi: ${engineResult.status || 'SUCCESS'}\n`;
-        if (engineResult.latencyMs) {
-          messageToSend += `- Waktu Komputasi: ${engineResult.latencyMs} ms\n`;
-        }
-        if (engineResult.current_price) {
-          messageToSend += `- Harga Pasar Terkini: ${engineResult.current_price}\n`;
-        }
-        if (engineResult.message) {
-          messageToSend += `- Pesan Mesin: ${engineResult.message}\n`;
-        }
-        if (engineResult.output?.executedSteps && Array.isArray(engineResult.output.executedSteps)) {
-          messageToSend += `- Rincian Eksekusi Berantai Multi-Mesin (Step-by-Step Pipeline):\n`;
-          engineResult.output.executedSteps.forEach((s: any) => {
-            messageToSend += `  • [Langkah ${s.stepNumber}] Mesin: ${s.engine} | Status: ${s.status} | Skor Verifikasi: ${s.verificationScore}% | Latensi: ${s.latencyMs}ms\n`;
-          });
-        }
-        if (engineResult.realOutput || engineResult.output || engineResult.data) {
-          const rawData = engineResult.realOutput || engineResult.output || engineResult.data;
-          messageToSend += `- Data Hasil Nyata Mesin:\n${JSON.stringify(rawData, null, 2)}\n`;
-        }
+        const isEngineFailed = engineResult.status === 'FAILED' || engineResult.status === 'error' || engineResult.status === 'FAILURE';
+        if (isEngineFailed) {
+          messageToSend += `\n\n[STATUS EKSEKUSI ENGINE: GAGAL / UNAVAILABLE]:\n`;
+          messageToSend += `- Nama Mesin: ${engineName}\n`;
+          messageToSend += `- Status: FAILED\n`;
+          messageToSend += `- Alasan/Pesan: ${engineResult.message || engineResult.error || 'Eksekusi engine tidak berhasil atau ditolak verification gate'}\n`;
+          messageToSend += `[MANDAT MUTLAK]: Laporkan secara transparan kepada pengguna bahwa eksekusi mesin tidak tersedia. DILARANG KERAS mengarang, memalsukan, atau mensimulasikan hasil kalkulasi/angka/data sendiri seolah-olah mesin berhasil.\n`;
+        } else {
+          messageToSend += `\n\n[HASIL NYATA EKSEKUSI ENGINE - NAVIX VERIFIED DATA]:\n`;
+          messageToSend += `- Nama Mesin: ${engineName}\n`;
+          messageToSend += `- Status Eksekusi: ${engineResult.status || 'SUCCESS'}\n`;
+          if (engineResult.latencyMs) {
+            messageToSend += `- Waktu Komputasi: ${engineResult.latencyMs} ms\n`;
+          }
+          if (engineResult.current_price) {
+            messageToSend += `- Harga Pasar Terkini: ${engineResult.current_price}\n`;
+          }
+          if (engineResult.message) {
+            messageToSend += `- Pesan Mesin: ${engineResult.message}\n`;
+          }
+          if (engineResult.output?.executedSteps && Array.isArray(engineResult.output.executedSteps)) {
+            messageToSend += `- Rincian Eksekusi Berantai Multi-Mesin (Step-by-Step Pipeline):\n`;
+            engineResult.output.executedSteps.forEach((s: any) => {
+              messageToSend += `  • [Langkah ${s.stepNumber}] Mesin: ${s.engine} | Status: ${s.status} | Skor Verifikasi: ${s.verificationScore}% | Latensi: ${s.latencyMs}ms\n`;
+            });
+          }
+          if (engineResult.realOutput || engineResult.output || engineResult.data) {
+            const rawData = engineResult.realOutput || engineResult.output || engineResult.data;
+            messageToSend += `- Data Hasil Nyata Mesin:\n${JSON.stringify(rawData, null, 2)}\n`;
+          }
 
-        messageToSend += `\n[INSTRUKSI UTAMA & MANDAT MUTLAK JAWABAN PRESISI]:\n`;
-        messageToSend += `1. BERIKAN JAWABAN/SOLUSI/KODE/ANALISIS AKHIR SECARA LENGKAP, LANGSUNG, SPESIFIK, DAN PRESISI SESUAI PERMINTAAN PENGGUNA.\n`;
-        messageToSend += `2. DILARANG HANYA MENJELASKAN ATAU MERANGKUM BAHWA PROSES TELAH DIJALANKAN (DILARANG TEKS META TANPA ISI). ANDA WAJIB MENAMPILKAN JAWABAN UTUH DAN SOLUSI SANGAT AKURAT.\n`;
-        messageToSend += `3. Sajikan data faktual di atas secara elegan, profesional, dan hangat tanpa mengubah nilai faktual yang dihitung mesin. Gunakan Markdown rapi.\n`;
+          messageToSend += `\n[INSTRUKSI UTAMA & MANDAT MUTLAK JAWABAN PRESISI]:\n`;
+          messageToSend += `1. BERIKAN JAWABAN/SOLUSI/KODE/ANALISIS AKHIR SECARA LENGKAP, LANGSUNG, SPESIFIK, DAN PRESISI SESUAI PERMINTAAN PENGGUNA.\n`;
+          messageToSend += `2. DILARANG HANYA MENJELASKAN ATAU MERANGKUM BAHWA PROSES TELAH DIJALANKAN (DILARANG TEKS META TANPA ISI). ANDA WAJIB MENAMPILKAN JAWABAN UTUH DAN SOLUSI SANGAT AKURAT.\n`;
+          messageToSend += `3. Sajikan data faktual di atas secara elegan, profesional, dan hangat tanpa mengubah nilai faktual yang dihitung mesin. Gunakan Markdown rapi.\n`;
+          messageToSend += `4. FIDELITAS DATA MUTLAK: Pertahankan setiap angka, unit, simbol, dan level teknis dari hasil mesin terverifikasi di atas tanpa modifikasi atau penggantian oleh spekulasi model.\n`;
+        }
       } else if (req.thinkingMode) {
         messageToSend += `\n\n[MANDAT KOGNITIF NAVIX AI]:\n`;
         messageToSend += `Hasilkan jawaban, kode, solusi, atau analisis akhir secara utuh, presisi, tuntas, dan sangat akurat. Dilarang memberikan teks penjelasan singkat tanpa jawaban asli.`;
@@ -656,6 +673,7 @@ export class NavixOrchestrator {
           effort: req.effort,
           thinkingMode: req.thinkingMode,
           aiBooster: req.aiBooster,
+          taskCategory: boosterData?.council?.category || adaptiveResult?.classification?.taskType || null,
           activePlugins: typeof window !== 'undefined' && localStorage.getItem('navix_plugins_list') 
             ? JSON.parse(localStorage.getItem('navix_plugins_list') || '[]').filter((p: any) => p.active)
             : []

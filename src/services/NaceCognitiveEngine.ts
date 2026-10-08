@@ -204,8 +204,23 @@ export class NaceCognitiveEngine {
       if (mandate.targetCapability) {
         constraints.push(`TARGET_CAPABILITY:${mandate.targetCapability}`);
       }
-      // If council classified as direct discussion and no specialized keywords override:
-      if (mandate.category === 'DIRECT_DISCUSSION' && domain === 'CHAT') {
+      // Absorb council category classification from AI Debat
+      if (mandate.category === 'TRADING' && domain === 'CHAT') {
+        domain = 'TRADING';
+        detectedTaskType = 'trading';
+      } else if (mandate.category === 'MATHEMATICS' && domain === 'CHAT') {
+        domain = 'MATH';
+        detectedTaskType = 'math' as any;
+      } else if (mandate.category === 'CODE_ENGINEERING' && domain === 'CHAT') {
+        domain = 'CODE';
+        detectedTaskType = 'code';
+      } else if (mandate.category === 'DOCUMENT_WORK' && domain === 'CHAT') {
+        domain = 'DOCUMENT';
+        detectedTaskType = 'document';
+      } else if (mandate.category === 'RESEARCH' && domain === 'CHAT') {
+        domain = 'RESEARCH';
+        detectedTaskType = 'research';
+      } else if (mandate.category === 'DIRECT_DISCUSSION' && domain === 'CHAT') {
         domain = 'CHAT';
         detectedTaskType = 'chat';
       }
@@ -825,6 +840,13 @@ export class NaceCognitiveEngine {
         stepPayload.evidenceBundle = prevData;
         stepPayload.researchContext = prevData.results ? prevData.results.map((r: any) => r.snippet || r.title).join('\n') : '';
       }
+      // Cable 3: MARKET_DATA ➔ TRADING_ANALYSIS: Forward verified livePrice, symbol, timeframe, and candles
+      if ((step.requiredCapability === 'trading_analysis' || step.requiredCapability === 'trading') && (prevData?.candles || prevData?.livePrice || prevData?.price)) {
+        stepPayload.candles = prevData.candles || stepPayload.candles;
+        stepPayload.livePrice = prevData.livePrice || prevData.price || stepPayload.livePrice;
+        stepPayload.symbol = prevData.symbol || stepPayload.symbol;
+        stepPayload.timeframe = prevData.timeframe || stepPayload.timeframe;
+      }
       // Cable 5: TRADING ➔ MATH: Compute exact formula if previous step produced trading levels
       if (step.requiredCapability === 'math' && prevData?.tpPrice && prevData?.entryPrice && prevData?.slPrice) {
         const tp = Number(prevData.tpPrice);
@@ -835,10 +857,17 @@ export class NaceCognitiveEngine {
           stepPayload.expression = expressionInput;
         }
       }
-      // Cable 6: VISION ➔ IMAGE / VIDEO / RESEARCH: Forward visual observation & detected objects
-      if ((step.requiredCapability === 'image' || step.requiredCapability === 'video' || step.requiredCapability === 'research') && (prevData?.observations || prevData?.domSummary || prevData?.analysis)) {
+      // Cable 6: VISION ➔ ALL DOMAINS: Forward visual observation, OCR text, and chart patterns
+      if (prevData?.visualSummary || prevData?.neuralAnalysis || prevData?.observations || prevData?.extractedText) {
         stepPayload.visualObservation = prevData;
-        stepPayload.visualContext = typeof prevData.observations === 'string' ? prevData.observations : JSON.stringify(prevData);
+        stepPayload.visualContext = prevData.visualSummary || prevData.neuralAnalysis || JSON.stringify(prevData);
+        if (prevData.extractedText || prevData.neuralAnalysis) {
+          stepPayload.ocrText = prevData.extractedText || prevData.neuralAnalysis;
+          stepPayload.documentText = prevData.extractedText || prevData.neuralAnalysis;
+        }
+        if (prevData.patterns && Array.isArray(prevData.patterns)) {
+          stepPayload.chartPatterns = prevData.patterns;
+        }
       }
 
       let executionSuccess = false;
@@ -954,6 +983,11 @@ export class NaceCognitiveEngine {
           });
 
           if (step.verificationRequirement.strictGate || plan.executionPolicy.failClosedOnVerification) {
+            globalTaskManager.updateSubtask(taskId, step.stepId, {
+              status: 'FAILED',
+              error: step.error,
+              assignedEngine: step.assignedEngine
+            });
             throw new Error(`Verification Rejected: ${step.error}`);
           }
           break;
@@ -961,6 +995,11 @@ export class NaceCognitiveEngine {
       }
 
       step.status = 'COMPLETED';
+      globalTaskManager.updateSubtask(taskId, step.stepId, {
+        status: 'COMPLETED',
+        output: engineResult,
+        assignedEngine: step.assignedEngine
+      });
       onProgress?.(step.stepId, 'COMPLETED', `Finished ${step.objective}`);
 
       this.logObservability({
