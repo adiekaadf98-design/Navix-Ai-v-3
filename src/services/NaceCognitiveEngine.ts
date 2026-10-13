@@ -642,7 +642,9 @@ export class NaceCognitiveEngine {
       const cap = step.requiredCapability;
       const pilgunResult = globalToolSelector.selectOptimalEngine(cap, {
         query: envelope.rawRequest,
-        complexity: plan.complexity
+        complexity: plan.complexity,
+        hardwareProfile: envelope.context?.hardwareProfile,
+        telemetryProfile: envelope.context?.telemetry || envelope.context?.granularSelection?.telemetryEvaluated
       });
 
       // Strict capability non-availability check (Anti-Placeholder)

@@ -1,7 +1,7 @@
 import { Key, 
   Menu, Plus, MessageSquare, Settings, Compass, Trash2, Shield, X, Beaker, FileText, Cloud, Sparkles, Layers, ChevronRight, Cpu, CreditCard,
   Image as ImageIcon, Video, Volume2, Folder, Bot, Share2, Puzzle, Database, GitBranch, Boxes, CandlestickChart, TrendingUp, Search, Camera, Clock3, LogOut, History,
-  MoreVertical, Pencil, Check
+  MoreVertical, Pencil, Check, Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useState, useEffect } from 'react';
@@ -85,6 +85,8 @@ export function Sidebar({
       groupTitle: 'Core & Labs', 
       items: [
         { id: 'chat' as NavixAppView, label: 'Chat AI', badge: 'Live', desc: 'Orkestrator Multi-Engine', icon: <MessageSquare size={17} />, accentBorder: 'bg-red-500' },
+        { id: 'ecosystem_hub' as NavixAppView, label: 'Ecosystem Vault', badge: 'Tri-Tier', desc: 'Deliberation Vault, Live Stream & SMC Sandbox', icon: <Layers size={17} className="text-indigo-400" />, accentBorder: 'bg-indigo-500' },
+        { id: 'architecture_runtime' as NavixAppView, label: 'Arsitektur Engine', badge: 'Rork AI', desc: 'Observabilitas Arsitektur & Runtime', icon: <Activity size={17} className="text-red-400" />, accentBorder: 'bg-red-500' },
         { id: 'studio' as NavixAppView, label: 'Studio AI', badge: 'Canvas', desc: 'Web & APK Builder Engine', icon: <Sparkles size={17} />, accentBorder: 'bg-rose-500' },
         { id: 'science' as NavixAppView, label: 'Science Lab', badge: 'Quantum', desc: 'Autonomous Scientific Lab', icon: <Beaker size={17} />, accentBorder: 'bg-cyan-500' },
         { id: 'document' as NavixAppView, label: 'Doc Editor', badge: 'IMRaD', desc: 'Laporan Ilmiah & PDF', icon: <FileText size={17} />, accentBorder: 'bg-emerald-500' },

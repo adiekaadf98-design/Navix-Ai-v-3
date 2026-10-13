@@ -1,4 +1,4 @@
-import { TaskType } from './ThinkingEngine';
+import { TaskType, HardwareResourceProfile, RuntimeTelemetryMetrics } from './ThinkingEngine';
 import { globalEngineRegistry, EngineHealthStatus } from './EngineRegistry';
 
 export interface ToolCapability {
@@ -21,6 +21,7 @@ export interface EngineCandidateEvaluation {
   compatibilityScore: number; // 0 - 100
   latencyScore: number;       // 0 - 100
   qualityScore: number;       // 0 - 100
+  hardwareFitScore?: number;  // 0 - 100
   totalScore: number;         // 0 - 100
   selectable: boolean;
   rejectionReason?: string;
@@ -60,7 +61,7 @@ export class ToolSelector {
    * - quality & resource
    * - task requirement
    */
-  public selectOptimalEngine(capability: string, context?: { query?: string; complexity?: string; preferredType?: 'NAVIX' | 'OPEN_SOURCE_GITHUB' }): PilgunSelectionResult {
+  public selectOptimalEngine(capability: string, context?: { query?: string; complexity?: string; preferredType?: 'NAVIX' | 'OPEN_SOURCE_GITHUB'; hardwareProfile?: HardwareResourceProfile; telemetryProfile?: RuntimeTelemetryMetrics }): PilgunSelectionResult {
     const q = (context?.query || '').toLowerCase();
     const cap = capability.toLowerCase();
 
@@ -115,6 +116,33 @@ export class ToolSelector {
       ],
       'macro': [
         { name: 'ForexFactoryService', type: 'NAVIX_CORE' }
+      ],
+      'backtest': [
+        { name: 'BacktestSandboxEngine', type: 'NAVIX_CORE' },
+        { name: 'RetailTraderGitHubEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'freqtrade/freqtrade, ccxt/ccxt', license: 'GPL-3.0 / MIT' }
+      ],
+      'backtesting': [
+        { name: 'BacktestSandboxEngine', type: 'NAVIX_CORE' },
+        { name: 'RetailTraderGitHubEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'freqtrade/freqtrade', license: 'GPL-3.0' }
+      ],
+      'smc': [
+        { name: 'SmcQuantitativeMatrix', type: 'NAVIX_CORE' },
+        { name: 'BacktestSandboxEngine', type: 'NAVIX_CORE' },
+        { name: 'SignalEngine', type: 'NAVIX_CORE' },
+        { name: 'RetailTraderGitHubEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'ta-lib/ta-lib-python', license: 'BSD-3-Clause' }
+      ],
+      'smc_matrix': [
+        { name: 'SmcQuantitativeMatrix', type: 'NAVIX_CORE' },
+        { name: 'DataAnalysisEngine', type: 'NAVIX_CORE' }
+      ],
+      'particle_filter': [
+        { name: 'SmcQuantitativeMatrix', type: 'NAVIX_CORE' },
+        { name: 'DataAnalysisEngine', type: 'NAVIX_CORE' }
+      ],
+      'quantitative': [
+        { name: 'SmcQuantitativeMatrix', type: 'NAVIX_CORE' },
+        { name: 'DataAnalysisEngine', type: 'NAVIX_CORE' },
+        { name: 'MathEngine', type: 'NAVIX_CORE' }
       ],
       'github_opensource': [
         { name: 'GitHubOpenSourceEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'https://github.com', license: 'Open Source / MIT' },
@@ -212,6 +240,7 @@ export class ToolSelector {
         { name: 'McpSkillRouter', type: 'OPEN_SOURCE_GITHUB', repo: 'modelcontextprotocol/servers', license: 'MIT' }
       ],
       'mcp': [
+        { name: 'McpHubEngine', type: 'NAVIX_CORE' },
         { name: 'McpSkillRouter', type: 'OPEN_SOURCE_GITHUB', repo: 'modelcontextprotocol/servers', license: 'MIT' },
         { name: 'AgentEngine', type: 'NAVIX_CORE' }
       ],
@@ -380,8 +409,53 @@ export class ToolSelector {
         qualityScore = Math.round((info.successCount / totalRuns) * 100);
       }
 
-      // Total Weighted Score: Compatibility 45%, Quality 35%, Latency 20%
-      const totalScore = selectable ? Math.round((compatibilityScore * 0.45) + (qualityScore * 0.35) + (latencyScore * 0.20)) : 0;
+      // 5. Hardware fitness & live telemetry scoring
+      let hardwareFitScore = 85;
+      if (context?.hardwareProfile) {
+        const hw = context.hardwareProfile;
+        if (cand.name === 'LocalDreamImageEngine') {
+          if (hw.hasNpu && !hw.isResourceConstrained) {
+            hardwareFitScore = 98;
+          } else if (hw.isResourceConstrained) {
+            hardwareFitScore = 40;
+          }
+        } else if (cand.name === 'DuckDbAnalyticsEngine' || cand.name === 'DanfoDataEngine' || cand.name === 'ChromaVectorEngine') {
+          if (hw.isResourceConstrained) {
+            hardwareFitScore = 50;
+          } else if (hw.deviceTier === 'high_performance') {
+            hardwareFitScore = 95;
+          }
+        } else if (cand.name === 'VideoEngine') {
+          hardwareFitScore = hw.isResourceConstrained ? 65 : 92;
+        } else {
+          hardwareFitScore = hw.isResourceConstrained ? 95 : 90;
+        }
+      }
+
+      // Evaluasi beban telemetri CPU & Memori real-time
+      if (context?.telemetryProfile) {
+        const telem = context.telemetryProfile;
+        const isUnderHeavyLoad = telem.status === 'HEAVY_LOAD' || telem.status === 'CRITICAL_LOAD' || telem.cpuPercent > 70 || telem.memoryHeapMb > 360;
+        if (isUnderHeavyLoad) {
+          // Turunkan skor mesin berat yang menguras memori/CPU jika sistem sedang sibuk
+          if (cand.name === 'LocalDreamImageEngine' || cand.name === 'Crawl4AiScraperEngine' || cand.name === 'DuckDbAnalyticsEngine') {
+            hardwareFitScore = Math.max(20, hardwareFitScore - 40);
+            latencyScore = Math.max(25, latencyScore - 30);
+          } else if (cand.name === 'SearchEngine' || cand.name === 'MathEngine' || cand.name === 'ImageEngine') {
+            // Berikan prioritas pada penyedia ringan/cloud-backed yang tangguh
+            hardwareFitScore = Math.min(100, hardwareFitScore + 10);
+          }
+        }
+      }
+
+      // Total Weighted Score:
+      // If hardware/telemetry profile provided: Compatibility 40%, Quality 30%, Latency 15%, HardwareFit 15%
+      // Otherwise: Compatibility 45%, Quality 35%, Latency 20%
+      const totalScore = selectable
+        ? (context?.hardwareProfile || context?.telemetryProfile)
+          ? Math.round((compatibilityScore * 0.40) + (qualityScore * 0.30) + (latencyScore * 0.15) + (hardwareFitScore * 0.15))
+          : Math.round((compatibilityScore * 0.45) + (qualityScore * 0.35) + (latencyScore * 0.20))
+        : 0;
 
       evaluations.push({
         engineName: cand.name,
@@ -390,6 +464,7 @@ export class ToolSelector {
         compatibilityScore,
         latencyScore,
         qualityScore,
+        hardwareFitScore,
         totalScore,
         selectable,
         rejectionReason,

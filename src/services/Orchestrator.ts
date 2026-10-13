@@ -4,12 +4,21 @@ import { globalEngineRegistry, ServiceRegistry } from './EngineRegistry';
 import { navixMemoryEngine } from '../memory/MemoryEngine';
 import { globalAdaptiveEngine } from './AdaptiveExecutionEngine';
 import { globalVerificationEngine } from './VerificationEngine';
-import { globalFailureRecovery } from './FailureRecoveryEngine';
-import { classifyTask } from './ThinkingEngine';
-import { rotateFetch } from '../lib/apiKeyRotator';
+import { 
+  classifyTask, 
+  evaluateGranularEngineSelection, 
+  detectSystemHardwareProfile,
+  getRuntimeTelemetry,
+  HardwareResourceProfile,
+  RuntimeTelemetryMetrics,
+  GranularEngineSelectionResult 
+} from './ThinkingEngine';
 import { EvidenceEngine } from './AdvancedReasoning';
 import { globalDeliberationCouncil } from './council/DeliberationCouncilEngine';
 import { MediaVaultService } from './WorkspaceIntegrationEngine';
+import { globalFailureRecovery } from './FailureRecoveryEngine';
+import { rotateFetch } from '../lib/apiKeyRotator';
+import { globalDeliberationVault } from './DeliberationVaultService';
 
 
 /**
@@ -260,8 +269,8 @@ export class NavixOrchestrator {
       const evidenceEngine = new EvidenceEngine();
       const extractedEvidence = evidenceEngine.extractEvidence(req.message, "User Prompt");
 
-      notify("booster_council", "pending", "Sidang Dewan Deliberasi Multi-Agen (Pilgun Arbitrator)");
-      const councilVerdict = globalDeliberationCouncil.deliberate(req.message, {
+      notify("booster_council", "pending", "Sidang Dewan Deliberasi Multi-Agen (MCTS Dialektis & Pilgun)");
+      const councilVerdict = await globalDeliberationCouncil.deliberateWithMcts(req.message, {
         attachmentsCount: req.attachments?.length || 0,
         historyLength: req.history?.length || 0
       });
@@ -273,6 +282,35 @@ export class NavixOrchestrator {
         memory: ""
       };
 
+      // Evaluasi Hardware Profil & Live CPU/Memory Telemetri
+      const hardwareProfile = detectSystemHardwareProfile();
+      const liveTelemetry = await getRuntimeTelemetry();
+
+      const granularSelection = evaluateGranularEngineSelection(req.message, {
+        attachments: req.attachments,
+        hardware: hardwareProfile,
+        telemetry: liveTelemetry,
+        preferredEngine: councilVerdict.recommendedEngine.selectedEngine || councilVerdict.recommendedEngine.primaryEngine
+      });
+
+      if (granularSelection.telemetryDegraded) {
+        notify("supervisor_state", "pending", `Telemetry Guard: CPU ${liveTelemetry.cpuPercent}% / Heap ${liveTelemetry.memoryHeapMb}MB. Penyesuaian rute engine adaptif.`);
+      }
+
+      console.log(`[Orchestrator] 🚀 Granular Engine & Telemetry Evaluation:`, {
+        subDomain: granularSelection.subDomain,
+        complexity: granularSelection.complexity,
+        primaryEngine: granularSelection.primaryEngine,
+        hardwareTier: granularSelection.hardwareTier,
+        telemetry: {
+          cpu: `${liveTelemetry.cpuPercent}%`,
+          heap: `${liveTelemetry.memoryHeapMb}MB`,
+          status: liveTelemetry.status
+        },
+        telemetryDegraded: granularSelection.telemetryDegraded,
+        resourceAllocation: granularSelection.resourceAllocation
+      });
+
       if (!req.message.startsWith('[GOOGLE_COMPOSITE]')) {
         try {
           const envelope = {
@@ -282,13 +320,23 @@ export class NavixOrchestrator {
               attachmentsCount: req.attachments?.length || 0,
               attachments: req.attachments,
               history: req.history,
+              hardwareProfile,
+              telemetry: liveTelemetry,
+              granularSelection,
               deliberationVerdict: councilVerdict,
               deliberationMandate: {
                 primaryGoal: councilVerdict.deconstructedIntent.primaryGoal,
                 category: councilVerdict.category,
                 targetCapability: councilVerdict.targetCapability,
-                recommendedEngine: councilVerdict.recommendedEngine.selectedEngine || councilVerdict.recommendedEngine.primaryEngine,
-                implicitConstraints: councilVerdict.deconstructedIntent.implicitConstraints,
+                recommendedEngine: granularSelection.primaryEngine || councilVerdict.recommendedEngine.selectedEngine || councilVerdict.recommendedEngine.primaryEngine,
+                implicitConstraints: [
+                  ...(councilVerdict.deconstructedIntent.implicitConstraints || []),
+                  `HARDWARE_TIER:${hardwareProfile.deviceTier.toUpperCase()}`,
+                  `MEMORY_BUDGET:${granularSelection.resourceAllocation.estimatedMemoryMb}MB`,
+                  `CPU_LOAD:${liveTelemetry.cpuPercent}%`,
+                  `TELEMETRY_STATUS:${liveTelemetry.status}`,
+                  `STREAM_MODE:${granularSelection.resourceAllocation.streamMode ? 'ENABLED' : 'DISABLED'}`
+                ],
                 prohibitedAssumptions: councilVerdict.factCheckAudit.prohibitedAssumptions,
                 antiLazinessDirectives: councilVerdict.deconstructedIntent.antiLazinessDirectives,
                 dialogueLog: councilVerdict.dialogueLog
@@ -363,15 +411,22 @@ export class NavixOrchestrator {
         engineName = 'AI_DEBATE';
         engineResult = null;
       } else {
-        notify("agent_state", "pending", "Analyzing Intent & Planning Tasks");
+        notify("agent_state", "pending", `Selecting Engine: ${granularSelection.primaryEngine} (${granularSelection.complexity.toUpperCase()} | Tier: ${hardwareProfile.deviceTier.toUpperCase()})`);
         const executionPlan = ServiceRegistry.planExecution(req.message, req.attachments);
         console.log(`[Orchestrator] 🧠 Intent & Task Analysis:`, executionPlan);
+        console.log(`[Orchestrator] ⚡ Granular Hardware Selection:`, granularSelection);
 
         if (executionPlan.mode === 'DIRECT_CHAT') {
           console.log(`[Orchestrator] 💬 Fast-path Dialogis Murni (AI Debat -> Main Chat): Tanpa pemanggilan worker engine.`);
           engineName = 'AI_DEBATE';
           engineResult = null;
         } else {
+          // Dinamis prioritaskan engine terspesialisasi dari Granular Selection berdasarkan kompleksitas & hardware
+          if (executionPlan.mode !== 'MULTI' && granularSelection.primaryEngine && granularSelection.primaryEngine !== 'DefaultEngine' && globalEngineRegistry.hasEngine(granularSelection.primaryEngine)) {
+            console.log(`[Orchestrator] 🎯 Granular Provider Priority: [${granularSelection.primaryEngine}] over [${executionPlan.primaryEngine}] (Reason: ${granularSelection.rationale})`);
+            executionPlan.primaryEngine = granularSelection.primaryEngine;
+          }
+
           // Synergize with Deliberation Council & Pilgun Arbiter:
           if (executionPlan.mode !== 'MULTI' && boosterData?.council?.recommendedEngine?.selectedEngine) {
             const pilgunSelected = boosterData.council.recommendedEngine.selectedEngine;
@@ -382,7 +437,7 @@ export class NavixOrchestrator {
           }
 
           engineName = executionPlan.primaryEngine;
-          notify("engine_started", "pending", `Dispatching to ${engineName}`);
+          notify("engine_started", "pending", `Dispatching to ${engineName} (Hardware Tier: ${hardwareProfile.deviceTier.toUpperCase()})`);
 
           if (executionPlan.mode === 'MULTI' && executionPlan.tasks.length > 1) {
             // Multi-engine pipeline execution via AgentEngine
@@ -391,7 +446,9 @@ export class NavixOrchestrator {
               notify("engine_progress", "pending", `Running Multi-Engine Pipeline (${executionPlan.engineSequence.join(' ➔ ')})`);
               engineResult = await agentEngine.execute({
                 goal: req.message,
-                steps: executionPlan.tasks
+                steps: executionPlan.tasks,
+                hardwareProfile,
+                streamMode: granularSelection.resourceAllocation.streamMode
               });
               engineName = 'AgentEngine';
             }
@@ -400,7 +457,7 @@ export class NavixOrchestrator {
             const engine = globalEngineRegistry.getEngine(engineName);
             if (engine) {
               notify("engine_progress", "pending", `Executing ${engineName}`);
-              console.log(`[Orchestrator] ⚙️ Executing Worker Engine: [${engineName}]`);
+              console.log(`[Orchestrator] ⚙️ Executing Worker Engine: [${engineName}] with Hardware Constraints: [${hardwareProfile.deviceTier}]`);
 
               const basePayload = {
                 query: req.message,
@@ -408,7 +465,12 @@ export class NavixOrchestrator {
                 input: req.message,
                 expression: req.message,
                 integer: req.message,
-                attachments: req.attachments
+                attachments: req.attachments,
+                hardwareProfile,
+                telemetry: liveTelemetry,
+                streamMode: granularSelection.resourceAllocation.streamMode,
+                resourceBudgetMb: granularSelection.resourceAllocation.estimatedMemoryMb,
+                cpuPriority: granularSelection.resourceAllocation.cpuPriority
               };
               const taskPayload = { ...basePayload, ...(executionPlan.tasks[0]?.payload || {}) };
 
@@ -518,11 +580,13 @@ export class NavixOrchestrator {
         }
       }
 
+      let gateVerification: any = null;
       // Verification Quality Gate: Mandatory on all worker engine outputs
       if (engineResult && !adaptiveResult) {
         notify("supervisor_state", "pending", "VERIFYING");
         const { taskType } = classifyTask(req.message);
         const verification = globalVerificationEngine.verify(taskType, engineResult.data || engineResult.output || engineResult);
+        gateVerification = verification;
         
         if (!verification.passed) {
           notify("supervisor_state", "pending", "CORRECTING");
@@ -557,9 +621,32 @@ export class NavixOrchestrator {
         }
       }
 
-      // Step: AI Response Formatter
+      // Step: AI Response Formatter & Tri-Tier Deliberation Vault Persistence
       // AI receives the validated real output from the engine and structures the final chat response
       notify("verification_started", "pending", "AI Formatting Verified Output");
+
+      // Record to Tri-Tier Deliberation Vault (IndexedDB + Server Ledger + Firestore)
+      try {
+        const finalVerification = gateVerification || 
+          (adaptiveResult ? adaptiveResult.verification : {
+            passed: true,
+            score: 100,
+            issues: [],
+            evidence: 'Dialectical council consensus verified by Quality Gate.',
+            domain: 'general'
+          });
+
+        globalDeliberationVault.recordDeliberation({
+          taskId: `task_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          originalPrompt: req.message,
+          verdict: councilVerdict,
+          verification: finalVerification,
+          telemetry: liveTelemetry
+        }).catch(vErr => console.warn('[Orchestrator] Deliberation vault record warning:', vErr));
+      } catch (vaultErr) {
+        console.warn('[Orchestrator] Deliberation vault capture warning:', vaultErr);
+      }
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
       };

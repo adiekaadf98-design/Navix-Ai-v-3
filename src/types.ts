@@ -25,6 +25,7 @@ export interface ChatSession {
 
 export type NavixAppView = 
   | 'chat' 
+  | 'ecosystem_hub'
   | 'studio' 
   | 'document' 
   | 'science' 
@@ -43,6 +44,7 @@ export type NavixAppView =
   | 'projects_isolation' 
   | 'trading_desk' 
   | 'stock_image_studio'
+  | 'architecture_runtime'
   | 'admin_dashboard';
 
 export interface SavedDocument {

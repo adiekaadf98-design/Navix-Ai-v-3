@@ -51,6 +51,9 @@ export interface TaskEnvelope {
     globalMemory?: string;
     deliberationMandate?: DeliberationMandate;
     deliberationVerdict?: any;
+    hardwareProfile?: any;
+    telemetry?: any;
+    granularSelection?: any;
     metadata?: Record<string, any>;
   };
   createdAt: number;

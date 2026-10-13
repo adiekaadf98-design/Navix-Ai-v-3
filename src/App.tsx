@@ -34,7 +34,9 @@ import { KnowledgeBaseStudio } from './components/studios/KnowledgeBaseStudio';
 import { AutomationsStudio } from './components/studios/AutomationsStudio';
 import { ProjectsIsolationStudio } from './components/studios/ProjectsIsolationStudio';
 import { CloudMarketStudio } from './components/trading/CloudMarketStudio';
+import { ArchitectureStudio } from './components/studios/ArchitectureStudio';
 import { AdminDashboard } from './components/admin/AdminDashboard';
+import { EcosystemHub } from './components/ecosystem/EcosystemHub';
 
 function MainChatApp() {
   const { user } = useAuthStore();
@@ -252,6 +254,7 @@ function MainChatApp() {
           />
         )}
         {currentView === 'world_clock' && <WorldClock />}
+        {currentView === 'ecosystem_hub' && <EcosystemHub onClose={() => setCurrentView('chat')} />}
         {currentView === 'studio' && <AIStudioCanvas {...studioProps} />}
         {currentView === 'document' && <DocumentEditor {...studioProps} />}
         {currentView === 'science' && <ScienceSandbox {...studioProps} />}
@@ -291,6 +294,7 @@ function MainChatApp() {
         {currentView === 'automations' && <AutomationsStudio {...studioProps} />}
         {currentView === 'projects_isolation' && <ProjectsIsolationStudio {...studioProps} />}
         {currentView === 'trading_desk' && <CloudMarketStudio {...studioProps} />}
+        {currentView === 'architecture_runtime' && <ArchitectureStudio {...studioProps} />}
         {currentView === 'admin_dashboard' && <AdminDashboard onClose={() => setCurrentView('chat')} />}
         {isImagePanelOpen && <ImageGenerationPanel onClose={() => setIsImagePanelOpen(false)} onSendMessage={handleSendMessage} isLoading={isLoading} />}
         {isPaymentOpen && (

@@ -46,6 +46,35 @@
         "updatedAt": "2024-01-01T00:00:00Z",
         "status": "active"
       }
+    },
+    "deliberation_audits": {
+      "__description": "Tamper-evident deliberation council records, telemetry metrics, and quality verification logs.",
+      "__fields": {
+        "auditId": "string",
+        "taskId": "string",
+        "originalPrompt": "string",
+        "councilDeliberation": "map",
+        "selectedEngine": "string",
+        "verificationPass": "boolean",
+        "integrityHash": "string",
+        "telemetryScore": "number",
+        "createdAt": "timestamp"
+      },
+      "__security": {
+        "read": "request.auth != null",
+        "write": "request.auth != null"
+      },
+      "__example": {
+        "auditId": "audit_1728000000",
+        "taskId": "task_101",
+        "originalPrompt": "Analisis likuiditas XAUUSD",
+        "councilDeliberation": {},
+        "selectedEngine": "retailTraderGitHubEngine",
+        "verificationPass": true,
+        "integrityHash": "a1b2c3d4...",
+        "telemetryScore": 98.4,
+        "createdAt": "2026-10-12T00:00:00Z"
+      }
     }
   }
 }

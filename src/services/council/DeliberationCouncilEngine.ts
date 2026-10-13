@@ -8,6 +8,7 @@
  */
 
 import { globalToolSelector, PilgunSelectionResult } from '../ToolSelector';
+import type { MctsReasoningResult } from '../ThinkingEngine';
 
 export interface CouncilAgent {
   id: string;
@@ -63,6 +64,7 @@ export interface DeliberationVerdict {
   dialecticalConsensusRate: number; // 0.0 to 1.0
   consensusSummary: string;
   dialogueLog: DeliberationDialogue[];
+  mctsReasoning?: MctsReasoningResult;
 }
 
 export class DeliberationCouncilEngine {
@@ -209,15 +211,19 @@ export class DeliberationCouncilEngine {
     let requiresExternalExecution = true;
     let targetCapability = 'general_execution';
     let primaryGoal = `Analisis mendalam dan formulasi solusi komprehensif untuk: "${userQuery}".`;
-    const implicitConstraints: string[] = [];
+    const implicitConstraints: string[] = [
+      'Integritas data deterministik 100% — dilarang menyajikan estimasi tanpa dasar kalkulasi mesin.',
+      'Kepatuhan struktur M2M (Machine-to-Machine) berantai — dilarang menyatukan mesin menjadi monolith spekulatif.'
+    ];
     const antiLazinessDirectives: string[] = [
-      'DILARANG memberikan kode sepotong dengan komentar // tulis kode di sini.',
-      'DILARANG menjawab secara tergesa-gesa atau menggunakan asumsi tanpa dasar empiris.',
-      'Wajib memberikan penjelasan terstruktur, tuntas, dan berorientasi hasil nyata.'
+      'MANDAT ZERO-LAZINESS: Hasilkan jawaban utuh, tuntas, dan berdensitas tinggi tanpa merangkum bagian esensial.',
+      'DILARANG KERAS memotong kode dengan komentar placeholder seperti "// tulis kode di sini" atau "// rest of code".',
+      'DILARANG KERAS berspekulasi atau mengarang angka pasar/finansial tanpa data klines/indikator nyata.',
+      'Wajib menyajikan seluruh implementasi teknis, rumus perhitungan, atau analisis secara komprehensif.'
     ];
 
-    let thesisThought = `Membedah perintah user "${userQuery}". Proposal argumen awal: Kita harus memecah masalah ini ke dalam lapisan inti, menetapkan batasan mutlak, dan menyusun peta kerja tuntas.`;
-    let veritasCritique = 'Waspadai potensi bias kepastian berlebih atau asumsi empiris yang belum teruji di dunia nyata.';
+    let thesisThought = `Argumen Horizon (Intent Deconstructor): Membedah perintah "${userQuery}" ke tingkat resolusi tertinggi. Menetapkan batas invarian sistem dan mandat anti-malas absolut.`;
+    let veritasCritique = 'Sanggahan Veritas (Adversarial Fact Checker): Menguji ketahanan empiris, menolak bias konfirmasi, dan melarang spekulasi tanpa bukti mesin terverifikasi.';
     let apexStrategy = 'Evaluasi kesesuaian ekosistem modul inti untuk mengeksekusi kebutuhan secara tuntas.';
     let finalConsensus = '';
 
@@ -335,7 +341,9 @@ export class DeliberationCouncilEngine {
       primaryGoal = 'Pengembangan arsitektur kode produksi, audit modul, mitigasi bug, dan kepatuhan tipe kuat.';
       implicitConstraints.push('Semua tipe TypeScript harus kuat, dilarang menggunakan any sembarangan.');
       implicitConstraints.push('Struktur modular harus dipatuhi, hindari penumpukan logika di satu berkas.');
-      antiLazinessDirectives.push('Tulis implementasi kode lengkap tanpa memotong bagian penting.');
+      implicitConstraints.push('Dilarang menggunakan placeholder atau komentar ringkasan pengganti kode.');
+      antiLazinessDirectives.push('Tulis implementasi kode lengkap 100% tanpa memotong fungsi atau merangkum blok kode.');
+      antiLazinessDirectives.push('Sertakan seluruh impor dependensi, interface tipe data, dan penanganan error komprehensif.');
       
       thesisThought = `Argumen Horizon: Usulkan refaktor/implementasi terarah dengan penelusuran call-stack dan modularitas file.`;
       veritasCritique = `Sanggahan Veritas: Jangan asal menambal bug pada lapisan permukaan. Telusuri Root Cause dan First Failure point agar tidak menciptakan regresi pada dependency lain.`;
@@ -482,6 +490,30 @@ export class DeliberationCouncilEngine {
       consensusSummary: finalConsensus,
       dialogueLog
     };
+  }
+
+  /**
+   * Deep dialectical deliberation using Monte Carlo Tree Search (MCTS).
+   * Explores multi-turn reasoning trees across Horizon (Thesis), Veritas (Antithesis),
+   * Apex (Stress-Testing), and Sovereign (Synthesis) using UCT/UCB1 optimization.
+   */
+  public async deliberateWithMcts(userQuery: string, options?: any): Promise<DeliberationVerdict> {
+    const verdict = this.deliberate(userQuery, options);
+    try {
+      const { globalMctsEngine } = await import('../ThinkingEngine');
+      const isComplex = verdict.category === 'CAPABILITY_EXECUTION' || verdict.category === 'MULTI_STEP_PIPELINE';
+      const mctsResult = await globalMctsEngine.search(userQuery, {
+        complexity: isComplex ? 'critical' : 'normal',
+        iterations: isComplex ? 35 : 20
+      });
+
+      verdict.mctsReasoning = mctsResult;
+      verdict.dialecticalConsensusRate = mctsResult.dialecticalConsensusRate;
+      verdict.consensusSummary = `${verdict.consensusSummary} [MCTS Dialectical Optimization: ${mctsResult.iterations} iterasi, pohon kedalaman ${mctsResult.maxTreeDepth}, konsensus ${Math.round(mctsResult.dialecticalConsensusRate * 100)}%].`;
+    } catch (err) {
+      console.warn('[DeliberationCouncilEngine] MCTS Search pass-through warning:', err);
+    }
+    return verdict;
   }
 }
 

@@ -1,4 +1,4 @@
-import { TaskType } from './ThinkingEngine';
+import { TaskType, globalMultiHopGroundingEngine, GroundingAuditResult } from './ThinkingEngine';
 
 export interface VerificationResult {
   passed: boolean;
@@ -7,6 +7,7 @@ export interface VerificationResult {
   evidence: string;
   domain?: string;
   auditTrail?: Record<string, any>;
+  groundingAudit?: GroundingAuditResult;
 }
 
 export class VerificationEngine {
@@ -188,11 +189,17 @@ export class VerificationEngine {
           result.score = 0;
           result.issues.push('No executable code generated.');
           result.evidence = 'Empty code payload.';
-        } else if (codeStr.includes('TODO_UNIMPLEMENTED') || codeStr.includes('YOUR_API_KEY_HERE') || codeStr.includes('PLACEHOLDER_NOT_REAL')) {
+        } else if (
+          codeStr.includes('TODO_UNIMPLEMENTED') || 
+          codeStr.includes('YOUR_API_KEY_HERE') || 
+          codeStr.includes('PLACEHOLDER_NOT_REAL') ||
+          /\/\/\s*\.{3}\s*(?:rest of code|existing code|write code here|code continues|insert code)/i.test(codeStr) ||
+          /\/\/\s*TODO:\s*(?:implement|add logic here|fill this)/i.test(codeStr)
+        ) {
           result.passed = false;
-          result.score = 60;
-          result.issues.push('Code contains unresolved placeholder constants or mock tokens.');
-          result.evidence = 'Fake success placeholder detected.';
+          result.score = 50;
+          result.issues.push('Code contains truncated snippet, lazy placeholders, or unresolved tokens.');
+          result.evidence = 'Incomplete or truncated code detected by Quality Gate.';
         } else {
           // Check basic bracket balancing
           let openBrackets = 0;
@@ -326,7 +333,34 @@ export class VerificationEngine {
           result.issues.push(output.message || output.error || 'Analytical and factual research synthesis failed.');
           result.evidence = 'Failed research execution.';
         } else {
-          result.evidence = `Research verified (${sourcesCount} sources ingested, domain triangulation confirmed).`;
+          // Multi-hop Semantic Grounding Audit for Research Outputs
+          const textCandidate = typeof dataObj === 'string'
+            ? dataObj
+            : (dataObj?.summary || dataObj?.text || dataObj?.report || (Array.isArray(dataObj?.results) ? dataObj.results.map((r: any) => r.snippet || r.title).join('. ') : ''));
+
+          if (textCandidate && typeof textCandidate === 'string' && textCandidate.length > 20) {
+            const externalCtx = Array.isArray(dataObj?.results)
+              ? dataObj.results.map((r: any) => ({ title: r.title, text: r.snippet || r.content, url: r.url }))
+              : undefined;
+
+            const grounding = globalMultiHopGroundingEngine.verifyOutput(textCandidate, { externalContext: externalCtx });
+            result.groundingAudit = grounding;
+            if (!result.auditTrail) result.auditTrail = {};
+            result.auditTrail.grounding = grounding;
+
+            if (grounding.contradictionsFound > 0) {
+              result.passed = false;
+              result.score = Math.min(result.score, grounding.factualityScore);
+              result.issues.push(`Multi-hop grounding rejected: Terdeteksi ${grounding.contradictionsFound} kontradiksi semantik.`);
+            } else if (grounding.unanchoredGaps > 3 && grounding.factualityScore < 60) {
+              result.score = Math.min(result.score, grounding.factualityScore);
+              result.issues.push(`Multi-hop grounding peringatan: Terdapat ${grounding.unanchoredGaps} unanchored factual gaps.`);
+            }
+
+            result.evidence = `Research verified (${sourcesCount} sources ingested). ${grounding.provenanceSummary}`;
+          } else {
+            result.evidence = `Research verified (${sourcesCount} sources ingested, domain triangulation confirmed).`;
+          }
         }
         break;
       }

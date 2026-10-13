@@ -219,16 +219,36 @@ const INDONESIAN_TO_ENGLISH_MAP: [RegExp, string][] = [
   [/\b(di hutan)\b/gi, 'in a natural forest'],
   [/\b(di bawah laut|di kedalaman laut|di samudra)\b/gi, 'underwater in the deep ocean with sunlight rays'],
   [/\b(di laut)\b/gi, 'in the sea'],
+  [/\b(di tepi pantai|tepi pantai|pinggir pantai|pesisir pantai)\b/gi, 'on a sandy beach during sunset by the ocean waves'],
+  [/\b(di pantai)\b/gi, 'at a beach with ocean waves'],
   [/\b(di rumah)\b/gi, 'at home'],
   [/\b(di kutub|di salju)\b/gi, 'in the snowy arctic landscape'],
   [/\b(di sabana|savana)\b/gi, 'in the African savanna grasslands'],
 
-  // 9. Lighting & Realism Descriptors
+  // 9. Couple, Romance & Human Social Relationships
+  [/\b(sedang pacaran|pacaran|berpacaran|kencan|berkencan|berduaan|berpasangan)\b/gi, 'romantic couple dating and sitting together affectionately'],
+  [/\b(sepasang kekasih|pasangan kekasih|pasangan romantis|pasangan muda)\b/gi, 'romantic young couple'],
+  [/\b(sama laki-laki|sama laki laki|sama laki".."|sama laki\s*"\.\."|sama laki\s*""|sama cowok|sama pria)\b/gi, 'with a handsome young man'],
+  [/\b(dan perempuan memakai hijab|perempuan memakai hijab|cewek memakai hijab|gadis memakai hijab|wanita memakai hijab|memakai hijab|pakai hijab|berhijab|berkerudung)\b/gi, 'the young woman wearing a soft elegant cream hijab with modest chic attire'],
+  [/\b(saling memandang|saling menatap|saling bertatapan|tatapan hangat)\b/gi, 'looking into each others eyes with warm affectionate gentle smiles'],
+  [/\b(bergandengan tangan|pegangan tangan)\b/gi, 'holding hands affectionately'],
+  [/\b(duduk santai|duduk berdua|duduk bersama)\b/gi, 'sitting closely and peacefully together'],
+
+  // 10. Lighting & Realism Descriptors
   [/\b(secara real dunia|real dunia|dunia nyata|asli|nyata|realistis)\b/gi, 'realistic'],
-  [/\b(senja|sore hari)\b/gi, 'during golden hour sunset'],
-  [/\b(pagi hari)\b/gi, 'in fresh morning daylight'],
+  [/\b(senja|sore hari|golden hour|sunset)\b/gi, 'during golden hour sunset'],
+  [/\b(pagi hari|sunrise)\b/gi, 'in fresh morning daylight'],
   [/\b(malam hari|malam)\b/gi, 'at night under soft moonlight']
 ];
+
+/**
+ * Clean user command prefixes like "buatkan saya gambar", "tolong buat foto", etc.
+ */
+export function cleanCommandPhrases(text: string): string {
+  return text
+    .replace(/^(?:tolong\s+)?(?:buatkan|buat|gambarkan|bikin|bikinkan|tampilkan|hasilkan|generate|render)(?:\s+(?:saya|kan|kami))?(?:\s+(?:gambar|foto|citra|visual|desain))?(?:\s+(?:tentang|berupa|sebuah|seekor|seorang))?\s+/gi, '')
+    .trim();
+}
 
 /**
  * Clean redundant diffusion buzzwords without deleting user-intended art styles
@@ -398,7 +418,7 @@ export function translateAndEnrichPrompt(rawPrompt: string): EnrichedPromptResul
       negativePrompt = 'low quality, deformed hands, extra fingers, bad anatomy, blurry, distorted face';
     } else {
       // Authentic human photography without forcing casual smartphone 24mm snapshot on specialized professions
-      enrichedPrompt = `Authentic natural photograph of ${translated}, natural human anatomy and proportions, genuine facial expression, realistic skin texture and natural tones, accurate posture and attire matching context, natural ambient lighting, professional optical depth`;
+      enrichedPrompt = `Authentic natural photograph of ${translated}, natural human anatomy and proportions, genuine facial expression, authentic epidermal skin texture with fine micro-pores and sub-surface scattering, natural catchlight reflections in cornea irises, accurate posture and attire matching context, natural ambient lighting, shot on 85mm f/1.4 prime lens, professional optical shallow depth of field`;
       negativePrompt = 'plastic skin, doll face, porcelain skin, artificial mannequin, wax figure, extra fingers, deformed hands, bad anatomy, unnatural gaze, airbrushed, blurry';
     }
   }
