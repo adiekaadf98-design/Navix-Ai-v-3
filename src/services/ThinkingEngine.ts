@@ -2321,7 +2321,7 @@ export class ParallelDagEngine {
               vScore = vCheck.score;
             } catch {}
 
-            if (node.state !== 'HEALED') {
+            if ((node.state as DagNodeState) !== 'HEALED') {
               node.state = 'COMPLETED';
             }
             node.output = observed;

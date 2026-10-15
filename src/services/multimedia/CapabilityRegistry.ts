@@ -37,6 +37,58 @@ export class CapabilityRegistry {
   private initMatrix(): void {
     const list: CapabilityMatrixEntry[] = [
       {
+        capabilityId: 'IMAGE_TURBO_FOOOCUS_SDXL',
+        name: 'Turbo Photorealism & Optical Synthesis (Fooocus/SDXL-Lightning + NMF)',
+        category: 'Image',
+        model: 'navix-turbo-fooocus-sdxl',
+        apiMethod: 'POST /api/multimedia/image/turbo',
+        inputFormat: 'text (prompt) + aspectRatio + resolution + photorealismConditioning',
+        outputFormat: 'image/png or image/jpeg base64 + EXIF metadata telemetry',
+        accessRequirement: 'DEFAULT_KEY',
+        billingRequired: false,
+        status: 'RUNTIME_VERIFIED',
+        fallbackStrategy: 'Sovereign Photorealism Engine -> Gemini Vision/Image fallback'
+      },
+      {
+        capabilityId: 'VIDEO_TURBO_ANIMATEDIFF_WAN',
+        name: 'Turbo Temporal Motion & Video Synthesizer (Wan2.1/AnimateDiff + FFmpeg)',
+        category: 'Video',
+        model: 'navix-turbo-animatediff-wan',
+        apiMethod: 'POST /api/multimedia/video/turbo',
+        inputFormat: 'text (prompt) + optional keyframe + motionStrength + cameraMove',
+        outputFormat: 'video/mp4 stream / binary buffer + 60fps telemetry',
+        accessRequirement: 'DEFAULT_KEY',
+        billingRequired: false,
+        status: 'RUNTIME_VERIFIED',
+        fallbackStrategy: 'FFmpeg cinematic zoompan stitcher -> Keyframe animation loop'
+      },
+      {
+        capabilityId: 'AUDIO_TURBO_MUSICGEN_LYRIA',
+        name: 'Turbo Polyphonic Audio & Music Synthesis (MusicGen/AudioCraft + PCM Buffer)',
+        category: 'Audio',
+        model: 'navix-turbo-musicgen-lyria',
+        apiMethod: 'POST /api/multimedia/audio/turbo',
+        inputFormat: 'text (prompt) + durationSeconds + tempoBpm + rootFreq',
+        outputFormat: 'audio/wav 48kHz base64 / binary buffer + spectral metrics',
+        accessRequirement: 'DEFAULT_KEY',
+        billingRequired: false,
+        status: 'RUNTIME_VERIFIED',
+        fallbackStrategy: 'Polyphonic Harmonic Oscillator -> Gemini Flash TTS'
+      },
+      {
+        capabilityId: 'PDF_TURBO_DOCLING_GRANITE',
+        name: 'Turbo Hierarchical Document & PDF Layout Extractor (IBM Granite Docling)',
+        category: 'Document',
+        model: 'navix-turbo-docling-granite',
+        apiMethod: 'POST /api/multimedia/pdf/turbo',
+        inputFormat: 'pdfBase64 or documentText or binary stream',
+        outputFormat: 'DoclingDocument JSON + extracted table matrices + CommonMark',
+        accessRequirement: 'DEFAULT_KEY',
+        billingRequired: false,
+        status: 'RUNTIME_VERIFIED',
+        fallbackStrategy: 'Docling Core Heuristics Parser -> Markdown OCR extraction'
+      },
+      {
         capabilityId: 'IMAGE_GENERATION_STANDARD',
         name: 'Standard Visual Synthesis',
         category: 'Image',

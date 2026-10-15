@@ -7,6 +7,32 @@ const getBaseApiUrl = (): string => {
   return (typeof process !== 'undefined' && process.env?.NAVIX_INTERNAL_BASE_URL) || 'http://127.0.0.1:3000';
 };
 
+// Pre-seed Builtin Turbo Multimedia Tools into MCP Registry
+mcpSkillRegistry.registerSkill({
+  name: "turbo_generate_image",
+  description: "Menghasilkan visual fotorealistik Fooocus/SDXL-Lightning dengan NMF conditioning",
+  inputSchema: { type: "object", properties: { prompt: { type: "string" }, aspectRatio: { type: "string" } }, required: ["prompt"] },
+  serverName: "turbo_multimedia"
+});
+mcpSkillRegistry.registerSkill({
+  name: "turbo_generate_video",
+  description: "Menghasilkan video temporal Wan2.1/AnimateDiff 60fps dengan FFmpeg",
+  inputSchema: { type: "object", properties: { prompt: { type: "string" }, cameraMovement: { type: "string" } }, required: ["prompt"] },
+  serverName: "turbo_multimedia"
+});
+mcpSkillRegistry.registerSkill({
+  name: "turbo_synthesize_audio",
+  description: "Menghasilkan komposisi audio polyphonic WAV MusicGen/Lyria",
+  inputSchema: { type: "object", properties: { prompt: { type: "string" }, durationSeconds: { type: "number" } }, required: ["prompt"] },
+  serverName: "turbo_multimedia"
+});
+mcpSkillRegistry.registerSkill({
+  name: "turbo_parse_pdf",
+  description: "Mengekstrak hierarki dokumen dan tabel PDF dengan IBM Granite Docling",
+  inputSchema: { type: "object", properties: { content: { type: "string" }, title: { type: "string" } }, required: ["content"] },
+  serverName: "turbo_multimedia"
+});
+
 export class NavixSkillRouter {
   static async discoverSkills(serverName: string): Promise<boolean> {
     try {

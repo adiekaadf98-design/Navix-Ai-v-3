@@ -19,6 +19,7 @@ import { MediaVaultService } from './WorkspaceIntegrationEngine';
 import { globalFailureRecovery } from './FailureRecoveryEngine';
 import { rotateFetch } from '../lib/apiKeyRotator';
 import { globalDeliberationVault } from './DeliberationVaultService';
+import { globalFinishingEngine } from './FinishingSynthesisEngine';
 
 
 /**
@@ -745,8 +746,24 @@ export class NavixOrchestrator {
       
       notify("collaborative_understanding", "pending", "Multi-Model Collaborative Intent Deconstruction");
 
-      const res = await rotateFetch('/api/chat', {
+      const taskCat = boosterData?.council?.category || adaptiveResult?.classification?.taskType || null;
+      const finishingMandate = globalFinishingEngine.formulateMandate({
+        domain: String(taskCat || engineName || 'general'),
+        taskCategory: taskCat,
+        hasEngineOutput: Boolean(engineResult),
+        engineName,
+        isTradingTask: Boolean(engineName && (engineName.includes('Signal') || engineName.includes('Trading') || engineName.includes('Crypto') || engineName.includes('Stock'))),
+        isCodeTask: Boolean(engineName && (engineName.includes('Coding') || engineName.includes('GitHub'))),
+        isMathTask: Boolean(engineName && engineName.includes('Math')),
+        hasMediaArtifact: Boolean(engineResult?.output?.imageBase64 || engineResult?.output?.videoUrl || engineResult?.output?.audioBase64 || (req.attachments && req.attachments.length > 0))
+      });
 
+      finalMessageToSend += `\n\n[MANDAT FINISHING ELEGAN & NADA BICARA ALAMI]:\n`;
+      finalMessageToSend += `- Nada Utama: ${finishingMandate.tone}\n`;
+      finalMessageToSend += `- Arahan Presentasi: ${finishingMandate.naturalFramingDirective}\n`;
+      finalMessageToSend += `- Aturan Anti-Kekakuan: ${finishingMandate.antiStiffnessRules.join('; ')}\n`;
+
+      const res = await rotateFetch('/api/chat', {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -754,13 +771,14 @@ export class NavixOrchestrator {
           attachments: req.attachments || [],
           disableTts: !req.voiceEnabled,
           model: req.model || "gemini-3.8-flash",
+          temperature: finishingMandate.recommendedTemperature,
           history: req.history || [],
           isImageEdit: imageIntent === 'edit',
           isImageDiscuss: imageIntent === 'discuss',
           effort: req.effort,
           thinkingMode: req.thinkingMode,
           aiBooster: req.aiBooster,
-          taskCategory: boosterData?.council?.category || adaptiveResult?.classification?.taskType || null,
+          taskCategory: taskCat,
           activePlugins: typeof window !== 'undefined' && localStorage.getItem('navix_plugins_list') 
             ? JSON.parse(localStorage.getItem('navix_plugins_list') || '[]').filter((p: any) => p.active)
             : []
@@ -809,9 +827,9 @@ export class NavixOrchestrator {
 
         let responseText = data.text || '';
         
-        // Strict Anti-Internal-Context-Leakage Filter:
+        // Strict Anti-Internal-Context-Leakage Filter & Finishing Tone Polish:
         // Strip any echoed internal control metadata tags, debug prompts, or internal directives
-        responseText = sanitizeUserDelivery(responseText);
+        responseText = globalFinishingEngine.polishFinalResponse(sanitizeUserDelivery(responseText));
         
         // Connect Signal Card to Main Chat if retail trader or signal engine produced real trading signals
         if (engineResult?.data?.instantSignalEligibility && !responseText.includes('```json signal') && !responseText.includes('```signal')) {

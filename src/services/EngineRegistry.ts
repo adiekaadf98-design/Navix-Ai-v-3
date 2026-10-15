@@ -44,6 +44,7 @@ import { globalEvidenceBundleEngine } from './evidence/EvidenceBundleEngine';
 import { globalConcurrencyManager } from './concurrency/EngineConcurrencyManager';
 import { globalComputerInteractionEngine } from './skills/browser/ComputerInteractionEngine';
 import { globalContextBuilderEngine } from '../memory/ContextBuilder';
+import { FinishingSynthesisEngine, globalFinishingEngine } from './FinishingSynthesisEngine';
 
 
 // When executing in the browser, always use the current window origin / relative path via API Key Router.
@@ -5603,6 +5604,58 @@ globalEngineRegistry.registerEngine(smcMatrixAdapter, {
 const smcMatrixAlt = new SmcQuantitativeEngineAdapter();
 smcMatrixAlt.name = 'SmcQuantitativeMatrixEngine';
 globalEngineRegistry.registerEngine(smcMatrixAlt);
+
+// -------------------------------------------------------------------------------------
+// Finishing Synthesis Engine Adapter (Natural Presentation & Anti-Stiffness Bridge)
+// -------------------------------------------------------------------------------------
+export class FinishingSynthesisEngineAdapter implements IEngine {
+  name = 'FinishingSynthesisEngine';
+  description = 'Mesin Penyempurna Akhir: Mengeliminasi kekakuan bahasa, mengadaptasi temperature dinamis, dan mengikat data empiris ke prosa luwes';
+  category = 'general' as const;
+  capabilities = ['finishing_synthesis', 'anti_stiffness', 'temperature_optimization', 'empirical_narrative_binding'];
+
+  async execute(payload: any): Promise<EngineResult<any>> {
+    const startTime = Date.now();
+    const domain = payload?.domain || payload?.taskCategory || 'general';
+    const mandate = globalFinishingEngine.formulateMandate({
+      domain,
+      taskCategory: payload?.taskCategory,
+      hasEngineOutput: Boolean(payload?.engineResult),
+      engineName: payload?.engineName,
+      isTradingTask: payload?.isTradingTask,
+      isCodeTask: payload?.isCodeTask,
+      isMathTask: payload?.isMathTask,
+      hasMediaArtifact: payload?.hasMediaArtifact
+    });
+
+    const polished = payload?.rawText ? globalFinishingEngine.polishFinalResponse(payload.rawText) : undefined;
+    const latencyMs = Date.now() - startTime;
+
+    return {
+      status: 'SUCCESS' as EngineStatus,
+      source: this.name,
+      engineName: this.name,
+      category: 'general',
+      latencyMs,
+      output: {
+        mandate,
+        polishedText: polished
+      },
+      data: mandate,
+      message: `Finishing Synthesis Engine berhasil merumuskan mandat nada [${mandate.tone}] dengan temperatur optimal ${mandate.recommendedTemperature}.`
+    };
+  }
+}
+
+const finishingAdapter = new FinishingSynthesisEngineAdapter();
+globalEngineRegistry.registerEngine(finishingAdapter, {
+  capabilities: ['finishing_synthesis', 'anti_stiffness', 'temperature_optimization'],
+  license: 'Proprietary Navix Core',
+  latencyAvgMs: 8
+});
+const finishingAlt = new FinishingSynthesisEngineAdapter();
+finishingAlt.name = 'FinishingEngine';
+globalEngineRegistry.registerEngine(finishingAlt);
 
 export { MathEngine, globalMathEngine, hitung_ekspresi, analisis_angka };
 

@@ -44,6 +44,7 @@ export type NavixAppView =
   | 'projects_isolation' 
   | 'trading_desk' 
   | 'stock_image_studio'
+  | 'turbo_multimedia'
   | 'architecture_runtime'
   | 'admin_dashboard';
 

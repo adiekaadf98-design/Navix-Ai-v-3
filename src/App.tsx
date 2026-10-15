@@ -37,6 +37,7 @@ import { CloudMarketStudio } from './components/trading/CloudMarketStudio';
 import { ArchitectureStudio } from './components/studios/ArchitectureStudio';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { EcosystemHub } from './components/ecosystem/EcosystemHub';
+import { TurboMultimediaConsole } from './components/TurboMultimediaConsole';
 
 function MainChatApp() {
   const { user } = useAuthStore();
@@ -259,6 +260,7 @@ function MainChatApp() {
         {currentView === 'document' && <DocumentEditor {...studioProps} />}
         {currentView === 'science' && <ScienceSandbox {...studioProps} />}
         {currentView === 'cloud' && <CloudConsole onOpenSidebar={studioProps.onOpenSidebar} onClose={() => setCurrentView('chat')} />}
+        {currentView === 'turbo_multimedia' && <TurboMultimediaConsole onOpenSidebar={studioProps.onOpenSidebar} onClose={() => setCurrentView('chat')} />}
         {currentView === 'image_studio' && <ImageStudio {...studioProps} />}
         {currentView === 'stock_image_studio' && <StockImageStudio {...studioProps} />}
         {currentView === 'video_studio' && <VideoStudio {...studioProps} />}

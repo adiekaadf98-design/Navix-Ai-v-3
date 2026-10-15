@@ -98,6 +98,7 @@ export function Sidebar({
     { 
       groupTitle: 'Multimedia', 
       items: [
+        { id: 'turbo_multimedia' as NavixAppView, label: 'Turbo Multimedia Hub', badge: 'Turbo', desc: 'Gambar, Video, Audio & PDF', icon: <Sparkles size={17} className="text-cyan-400" />, accentBorder: 'bg-cyan-500' },
         { id: 'stock_image_studio' as NavixAppView, label: 'Stok Gambar', badge: 'Library', desc: 'Library Stok Visual & Inspirasi', icon: <Camera size={17} />, accentBorder: 'bg-green-500' },
         { id: 'image_studio' as NavixAppView, label: 'Multimedia Images', badge: 'Visual', desc: 'Generate & upscale 8K visual', icon: <ImageIcon size={17} />, accentBorder: 'bg-red-500' },
         { id: 'video_studio' as NavixAppView, label: 'Multimedia Videos', badge: 'Motion', desc: 'Neural cinematic video clips', icon: <Video size={17} />, accentBorder: 'bg-rose-500' },

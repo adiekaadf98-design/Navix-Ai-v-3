@@ -142,6 +142,51 @@ export const OPEN_SOURCE_SKILLS_DIRECTORY: OpenSkillCluster[] = [
         capabilities: ["Graph DAG Pipeline", "ControlNet Multiplexing", "LoRA Stacking", "Latent Upscaling"]
       },
       {
+        name: "Fooocus",
+        repo: "lllyasviel/Fooocus",
+        description: "Focus on prompting and generating without complex knobs: high-fidelity SDXL-Lightning & Realism engine.",
+        starsApprox: "42k+",
+        primaryLanguage: "Python",
+        tags: ["sdxl", "photorealism", "fooocus", "turbo-diffusion"],
+        capabilities: ["Optical Prompt Translation", "Style Matrix Conditioning", "Skin Texture Refinement", "Negative Prompt Optimization"]
+      },
+      {
+        name: "Real-ESRGAN",
+        repo: "xinntao/Real-ESRGAN",
+        description: "Practical algorithms for general image/video restoration and 4K super-resolution upscaling.",
+        starsApprox: "26k+",
+        primaryLanguage: "Python/PyTorch",
+        tags: ["super-resolution", "upscaling", "real-esrgan", "4k"],
+        capabilities: ["Artifact Suppression", "Texture Reconstruction", "4x Super Resolution", "Denoising"]
+      },
+      {
+        name: "AnimateDiff & Wan2.1",
+        repo: "guoyww/AnimateDiff",
+        description: "Animate your personalized text-to-image diffusion models with temporal motion modules.",
+        starsApprox: "15k+",
+        primaryLanguage: "Python",
+        tags: ["video-generation", "motion-module", "animatediff", "temporal-modeling"],
+        capabilities: ["Motion LoRA", "Camera Panning & Tilting", "Temporal Attention", "60fps Frame Interpolation"]
+      },
+      {
+        name: "AudioCraft (MusicGen & AudioGen)",
+        repo: "facebookresearch/audiocraft",
+        description: "Deep learning library for audio generation: MusicGen (text-to-music) & AudioGen (sound effects).",
+        starsApprox: "24k+",
+        primaryLanguage: "Python/PyTorch",
+        tags: ["musicgen", "audiocraft", "text-to-audio", "polyphonic"],
+        capabilities: ["Polyphonic Melody Steering", "BPM & Harmonic Control", "EnCodec Acoustic Tokenizer", "Studio Mastering"]
+      },
+      {
+        name: "Docling",
+        repo: "docling-project/docling",
+        description: "IBM Granite Open Document Parsing Engine: OCR, layout segmentation, and tabular extraction for PDFs.",
+        starsApprox: "16k+",
+        primaryLanguage: "Python/TypeScript",
+        tags: ["pdf-parser", "docling", "table-extraction", "ocr", "granite"],
+        capabilities: ["Hierarchical Document Trees", "Complex Table Matrix Parsing", "CommonMark Export", "OCR Fallback"]
+      },
+      {
         name: "Diffusers",
         repo: "huggingface/diffusers",
         description: "State-of-the-art pretrained diffusion models for generating images and audio.",

@@ -168,14 +168,17 @@ export class ToolSelector {
       ],
       'document': [
         { name: 'DocumentEngine', type: 'NAVIX_CORE' },
+        { name: 'DoclingGraniteEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'docling-project/docling', license: 'MIT' },
         { name: 'MarkitDownParserEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'microsoft/markitdown', license: 'MIT' },
         { name: 'PdfJsExtractionEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'mozilla/pdf.js', license: 'Apache-2.0' }
       ],
       'pdf': [
+        { name: 'DoclingGraniteEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'docling-project/docling', license: 'MIT' },
         { name: 'DocumentEngine', type: 'NAVIX_CORE' },
         { name: 'PdfJsExtractionEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'mozilla/pdf.js', license: 'Apache-2.0' }
       ],
       'file_analysis': [
+        { name: 'DoclingGraniteEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'docling-project/docling', license: 'MIT' },
         { name: 'DocumentEngine', type: 'NAVIX_CORE' }
       ],
       'data_analysis': [
@@ -196,28 +199,34 @@ export class ToolSelector {
         { name: 'EpisodicMemoryEngine', type: 'NAVIX_CORE' }
       ],
       'image': [
+        { name: 'FooocusTurboEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'lllyasviel/Fooocus, xinntao/Real-ESRGAN', license: 'Apache-2.0' },
         { name: 'ImageEngine', type: 'NAVIX_CORE' },
         { name: 'PhotorealismEngine', type: 'NAVIX_CORE' },
         { name: 'LocalDreamImageEngine', type: 'NAVIX_CORE' },
         { name: 'SharpProcessingEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'lovell/sharp', license: 'Apache-2.0' }
       ],
       'image_generation': [
+        { name: 'FooocusTurboEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'lllyasviel/Fooocus, xinntao/Real-ESRGAN', license: 'Apache-2.0' },
         { name: 'ImageEngine', type: 'NAVIX_CORE' },
         { name: 'PhotorealismEngine', type: 'NAVIX_CORE' },
         { name: 'LocalDreamImageEngine', type: 'NAVIX_CORE' },
         { name: 'SharpProcessingEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'lovell/sharp', license: 'Apache-2.0' }
       ],
       'video': [
+        { name: 'WanVideoTurboEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'guoyww/AnimateDiff, Wan-Video/Wan2.1', license: 'Apache-2.0' },
         { name: 'VideoEngine', type: 'NAVIX_CORE' }
       ],
       'video_generation': [
+        { name: 'WanVideoTurboEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'guoyww/AnimateDiff, Wan-Video/Wan2.1', license: 'Apache-2.0' },
         { name: 'VideoEngine', type: 'NAVIX_CORE' }
       ],
       'audio': [
+        { name: 'AudioCraftMusicGenEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'facebookresearch/audiocraft', license: 'MIT' },
         { name: 'AudioEngine', type: 'NAVIX_CORE' },
         { name: 'ToneJsAudioEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'Tonejs/Tone.js', license: 'MIT' }
       ],
       'audio_generation': [
+        { name: 'AudioCraftMusicGenEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'facebookresearch/audiocraft', license: 'MIT' },
         { name: 'AudioEngine', type: 'NAVIX_CORE' },
         { name: 'ToneJsAudioEngine', type: 'OPEN_SOURCE_GITHUB', repo: 'Tonejs/Tone.js', license: 'MIT' }
       ],

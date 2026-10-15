@@ -641,6 +641,242 @@ export class MultimediaOrchestrator {
     };
   }
 
+  // =========================================================================
+  // TURBO MULTIMEDIA PIPELINES (HYBRID SERVER PROXY + GITHUB OPEN SOURCE)
+  // =========================================================================
+
+  /**
+   * 8. TURBO IMAGE (Fooocus / SDXL-Lightning + Real-ESRGAN + NMF Optical Conditioning)
+   */
+  public async generateTurboImage(options: {
+    prompt: string;
+    aspectRatio?: '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
+    resolution?: '512px' | '1K' | '2K' | '4K';
+  }): Promise<{
+    success: boolean;
+    imageBase64?: string;
+    mediaUrl?: string;
+    aspectRatio?: string;
+    engine: string;
+    telemetry?: any;
+    error?: string;
+  }> {
+    const startTime = Date.now();
+    try {
+      const res = await fetch('/api/multimedia/image/turbo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: options.prompt,
+          aspectRatio: options.aspectRatio || '1:1',
+          resolution: options.resolution || '1K'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.imageBase64) {
+        runtimeTracker.recordExecution({
+          capabilityId: 'IMAGE_TURBO_FOOOCUS_SDXL',
+          model: 'navix-turbo-fooocus-sdxl',
+          latencyMs: Date.now() - startTime,
+          success: true,
+          status: 'RUNTIME_VERIFIED',
+          evidence: `Generated high-fidelity image via Fooocus-SDXL-Lightning (${data.aspectRatio})`
+        });
+        return {
+          success: true,
+          imageBase64: data.imageBase64,
+          mediaUrl: data.mediaUrl || data.imageBase64,
+          aspectRatio: data.aspectRatio,
+          engine: data.engine || 'Fooocus-SDXL-Lightning-NMF',
+          telemetry: data.telemetry
+        };
+      }
+      throw new Error(data.error || 'Server proxy failed to generate turbo image');
+    } catch (err: any) {
+      console.warn('[MultimediaOrchestrator] Turbo image failed, falling back to standard generator:', err?.message);
+      const fallback = await this.generateImage({
+        prompt: options.prompt,
+        aspectRatio: options.aspectRatio as any,
+        resolution: options.resolution as any
+      });
+      return {
+        success: fallback.success,
+        imageBase64: fallback.imageBase64,
+        mediaUrl: fallback.imageBase64,
+        engine: fallback.model,
+        error: fallback.error
+      };
+    }
+  }
+
+  /**
+   * 9. TURBO VIDEO (Wan2.1 / AnimateDiff + FFmpeg 60fps Pipeline)
+   */
+  public async generateTurboVideo(options: {
+    prompt: string;
+    image?: string;
+    cameraMovement?: 'pan_zoom' | 'tilt' | 'static' | 'dolly';
+    durationSeconds?: number;
+  }): Promise<{
+    success: boolean;
+    operationName?: string;
+    videoUrl?: string;
+    frameUrl?: string;
+    engine: string;
+    fps?: number;
+    error?: string;
+  }> {
+    const startTime = Date.now();
+    try {
+      const res = await fetch('/api/multimedia/video/turbo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: options.prompt,
+          image: options.image,
+          cameraMovement: options.cameraMovement || 'pan_zoom',
+          durationSeconds: options.durationSeconds || 5
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        runtimeTracker.recordExecution({
+          capabilityId: 'VIDEO_TURBO_ANIMATEDIFF_WAN',
+          model: 'navix-turbo-animatediff-wan',
+          latencyMs: Date.now() - startTime,
+          success: true,
+          status: 'RUNTIME_VERIFIED',
+          evidence: `Dispatched Wan2.1/AnimateDiff video pipeline: ${data.operationName}`
+        });
+        return {
+          success: true,
+          operationName: data.operationName,
+          videoUrl: data.videoUrl,
+          frameUrl: data.frameUrl,
+          engine: data.engine || 'Wan2.1-AnimateDiff-FFmpeg',
+          fps: data.fps
+        };
+      }
+      throw new Error(data.error || 'Turbo video execution failed');
+    } catch (err: any) {
+      return {
+        success: false,
+        engine: 'Wan2.1-AnimateDiff-FFmpeg',
+        error: err?.message || 'Video Turbo generation error'
+      };
+    }
+  }
+
+  /**
+   * 10. TURBO AUDIO (MusicGen / AudioCraft + Polyphonic PCM Buffer)
+   */
+  public async generateTurboAudio(options: {
+    prompt: string;
+    durationSeconds?: number;
+    sampleRate?: number;
+  }): Promise<{
+    success: boolean;
+    audioBase64?: string;
+    mediaUrl?: string;
+    mimeType?: string;
+    engine: string;
+    telemetry?: any;
+    error?: string;
+  }> {
+    const startTime = Date.now();
+    try {
+      const res = await fetch('/api/multimedia/audio/turbo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: options.prompt,
+          durationSeconds: options.durationSeconds || 8,
+          sampleRate: options.sampleRate || 24000
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.audioBase64) {
+        runtimeTracker.recordExecution({
+          capabilityId: 'AUDIO_TURBO_MUSICGEN_LYRIA',
+          model: 'navix-turbo-musicgen-lyria',
+          latencyMs: Date.now() - startTime,
+          success: true,
+          status: 'RUNTIME_VERIFIED',
+          evidence: `Generated polyphonic audio via MusicGen-Turbo (${data.durationSeconds}s)`
+        });
+        return {
+          success: true,
+          audioBase64: data.audioBase64,
+          mediaUrl: data.mediaUrl,
+          mimeType: data.mimeType || 'audio/wav',
+          engine: data.engine || 'AudioCraft-MusicGen-Turbo',
+          telemetry: data.telemetry
+        };
+      }
+      throw new Error(data.error || 'Turbo audio synthesis failed');
+    } catch (err: any) {
+      return {
+        success: false,
+        engine: 'AudioCraft-MusicGen-Turbo',
+        error: err?.message || 'Audio Turbo generation error'
+      };
+    }
+  }
+
+  /**
+   * 11. TURBO PDF (IBM Granite Docling Core Engine + Hierarchical Layout Parser)
+   */
+  public async processTurboPdf(options: {
+    content: string;
+    title?: string;
+  }): Promise<{
+    success: boolean;
+    document?: any;
+    summary?: any;
+    engine: string;
+    error?: string;
+  }> {
+    const startTime = Date.now();
+    try {
+      const res = await fetch('/api/multimedia/pdf/turbo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: options.content,
+          title: options.title || 'Dokumen Analisis Navix AI'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.document) {
+        runtimeTracker.recordExecution({
+          capabilityId: 'PDF_TURBO_DOCLING_GRANITE',
+          model: 'navix-turbo-docling-granite',
+          latencyMs: Date.now() - startTime,
+          success: true,
+          status: 'RUNTIME_VERIFIED',
+          evidence: `Parsed document via IBM Granite Docling: ${data.summary?.totalWords} words, ${data.summary?.tablesCount} tables`
+        });
+        return {
+          success: true,
+          document: data.document,
+          summary: data.summary,
+          engine: data.engine || 'Docling-IBM-Granite-Turbo'
+        };
+      }
+      throw new Error(data.error || 'Turbo PDF parsing failed');
+    } catch (err: any) {
+      return {
+        success: false,
+        engine: 'Docling-IBM-Granite-Turbo',
+        error: err?.message || 'PDF Turbo processing error'
+      };
+    }
+  }
+
   /**
    * Returns complete capability matrix for API inspection
    */

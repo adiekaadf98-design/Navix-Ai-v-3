@@ -1,159 +1,153 @@
-# Blueprint Pembaruan Mesin Internal NAVIX PRO AI: Implementasi Logika Algoritma & Kecerdasan Komputasi Kelas Dunia
+# NAVIX PRO AI — Audit Kinerja Menyeluruh & Implementasi Finishing Synthesis Engine
 
-Rencana arsitektur presisi untuk memperbarui **kode, logika algoritma, dan heuristik komputasi internal** dari seluruh mesin ekosistem di balik layar NAVIX PRO AI, mengadopsi prinsip kecerdasan sistem komputasi terbaik di dunia (bukan menanamkan model eksternal/API pihak ketiga, melainkan meningkatkan kehebatan mesin internal NAVIX AI sendiri).
+Rencana peningkatan arsitektural dan optimasi menyeluruh untuk seluruh mesin di balik layar NAVIX PRO AI: mulai dari **Dewan Deliberasi (AI Debat: Horizon, Veritas, Apex, Sovereign)**, **API Key Rotator & Model Router**, **PILGUN (Pilihan Guna) & GitHub Open-Source Skills Hub**, hingga pembuatan mesin baru **FinishingSynthesisEngine** untuk menghasilkan jawaban realistis, tajam, luwes (*non-stiff*), dan berkekuatan penuh tanpa merusak standar fidelitas data institusional NAVIX.
+
+---
 
 ## User Review & Critical Decisions
 
 > [!IMPORTANT]
-> **Koreksi & Penegasan Mutlak Pengguna**:
-> Pembaruan ini **BUKAN** menanamkan model AI eksternal atau memanggil API pihak luar (seperti OpenAI, Claude, dll.), melainkan **MENG-UPGRADE KODE & ALGORITMA INTERNAL MESIN EKOSISTEM NAVIX AI SENDIRI**. Kecerdasan, logika kerja, dan heuristik terbaik dunia diimplementasikan langsung ke dalam mesin-mesin spesialis internal NAVIX AI di balik layar agar kinerja mesin lokal menjadi sangat tajam, stabil, akurat, dan berdaya komputasi tinggi.
-
-- **Keputusan Arsitektur Mesin Mandiri**: Seluruh peningkatan diterapkan langsung pada kode TypeScript/algoritma deterministik mesin NAVIX di `src/services/` (seperti `DeliberationCouncilEngine`, `CodingEngine`, `SignalEngine`, `BacktestSandboxEngine`, `SearchEngine`, `VerificationEngine`, dll.).
-- **Kepatuhan Terhadap Aturan Keras NAVIX PRO AI**:
-  1. **Dewan Deliberasi**: Menjalankan *Algoritma Dialektika Multi-Agen & Uji Fakta Empiris* murni sebagai perumus mandat dan penguji logika, bukan komputasi teks kosong.
-  2. **Mesin Spesialis**: Seluruh perhitungan berat (SMC math, parsing kode, analisis data, pencarian) dieksekusi secara nyata oleh mesin spesialis internal yang logikanya kita perbarui.
-  3. **Quality Gate Verification Engine**: Setiap output mesin wajib lolos validasi invariant deterministik 100% sebelum dirangkum oleh AI.
-  4. **Efisiensi Sumber Daya**: Algoritma baru dioptimalkan secara matematis agar hemat memori (O(n) kompleksitas, zero-memory-leak, chunked processing).
+> **Keputusan Terkonfirmasi dari Evaluasi & Arahan Pengguna:**
+> - **Cakupan Audit**: Seluruh rantai mesin di balik layar dievaluasi secara end-to-end (User Input ➔ AI Debat ➔ Intent Analyzer ➔ Pilgun Router ➔ Multi-Engine Execution ➔ Quality Gate ➔ Finishing Engine ➔ User Delivery).
+> - **Penyebab Utama Respon Kaku & Formulaik**:
+>   1. Nilai *temperature* hardcoded `0.1` di endpoint chat backend yang memaksa model merespon secara kaku dan berulang-ulang seperti mesin birokratis.
+>   2. Ketiadaan lapisan *Finishing Engine* spesifik yang bertugas menyelaraskan bahasa teknis mesin ke dalam prosa yang luwes, natural, dan berwibawa (*human-expert nuance*) tanpa mengorbankan angka empiris.
+>   3. Teks pengantar dan direktif sistem yang terlalu kaku dan sering bocor atau memicu gaya bicara mekanis.
+> - **Mandat Arsitektur Mutlak**: Dilarang menggabungkan mesin menjadi monolit (black-box). Seluruh komputasi tetap wajib dijalankan oleh mesin spesialis. Model AI murni bertindak sebagai pengarah instruksi dan penyusun kalimat akhir berbasis hasil kalkulasi nyata.
 
 ---
 
 ## 1. Overview & Core Concept
 
-- **Tujuan Utama**: Meningkatkan kapabilitas algoritma internal seluruh mesin NAVIX PRO AI ke standar kecerdasan tertinggi dunia melalui peningkatan kode logika, heuristik deterministik, dan metode komputasi berkecepatan tinggi.
-- **Kemandirian Sistem**: NAVIX PRO AI memiliki kedaulatan penuh atas mesin internalnya tanpa ketergantungan pada model asing, melainkan memiliki mesin sendiri yang tangguh, cerdas, dan mandiri.
-- **Keunggulan Sistem Hasil Pembaruan**:
-  - **Ketajaman Penalaran Mandiri**: Mesin dewan deliberasi membedah niat menggunakan pohon penalaran dialektis berbobot.
-  - **Ketelitian Koding Mandiri**: Mesin koding internal memvalidasi struktur sintaks, modularitas, dan kompatibilitas dependensi.
-  - **Presisi Finansial Kuantitatif Mandiri**: Mesin sinyal dan backtesting menghitung Order Block, FVG, dan rasio probabilitas dengan rumus matematika eksak.
-  - **Validasi Data Anti-Halusinasi Mandiri**: Quality Gate menguji bukti empiris secara deterministik.
+- **Apa yang Dibangun & Ditingkatkan**:
+  1. **Pembuatan FinishingSynthesisEngine (`src/services/FinishingSynthesisEngine.ts`)**:
+     Mesin baru yang bertindak sebagai jembatan cerdas antara keluaran empiris mesin (trading, code, math, research, multimedia, docling) dengan AI Response Formatter. Mesin ini mengeliminasi gaya bahasa kaku ("Berdasarkan data mesin...", "Sebagai AI..."), menyelaraskan intonasi sesuai konteks, memperkaya kedalaman analisis, serta memastikan 100% data terhitung tersaji secara presisi dan elegan.
+  2. **Optimalisasi AI Debat & Deliberation Council**:
+     Memperjelas mandat agen deliberasi (Horizon dekonstruksi maksud, Veritas anti-halusinasi data, Apex seleksi mesin, Sovereign mandat eksekutif) agar menghasilkan direktif finishing yang kontekstual.
+  3. **Penyesuaian Adaptif API Key Router & Chat Temperature**:
+     Menerapkan suhu (*temperature*) dinamis berbasis domain (0.15–0.25 untuk kalkulasi presisi & sinyal trading; 0.65–0.70 untuk penalaran konseptual, penulisan kreatif, strategi, dan dialog interaktif) sehingga jawaban mengalir realistis, tajam, dan tidak kaku.
+  4. **Penguatan Pilgun (Pilihan Guna) & GitHub Skills M2M Handoff**:
+     Memastikan output dari setiap tahapan mesin tersalurkan secara utuh ke tahap berikutnya tanpa pemotongan data (*zero data loss*).
+
+- **Nilai Utama**:
+  - **Realisme & Keluwesan**: Jawaban mengalir laksana analisis pakar senior institusional yang luwes, kontekstual, dan tajam.
+  - **Fidelitas Empiris 100%**: Tidak ada angka, harga, level Stop Loss, Take Profit, atau hasil kalkulasi matematika yang diubah atau dikarang.
 
 ---
 
-## 2. Rincian Peningkatan Logika Algoritma Per Mesin Internal
+## 2. User Experience & Visual Design
 
-### 1. `DeliberationCouncilEngine` (Logika Kognitif & Arbitrase Dialektis)
-- **Implementasi Algoritma**: *Multi-Agent Dialectical Search & Adversarial Consensus Protocol*.
-- **Peningkatan Kode**:
-  - **Agent Horizon**: Algoritma ekstraksi *Constraint Invariant* — membedah parameter tersembunyi perintah pengguna dan menyusun daftar *Anti-Laziness Directives* yang wajib dipatuhi.
-  - **Agent Veritas**: Algoritma *Adversarial Cross-Checking* — secara matematis menguji risiko halusinasi (`hallucinationRisk: 'ZERO' | 'LOW'`), menyaring asumsi tak berdasar, dan menetapkan skor kepercayaan faktual (*Factual Confidence Index*).
-  - **Agent Apex**: Algoritma *Matrix Scoring Pilgun* — mengevaluasi kecocokan mesin internal berdasarkan kemampuan, latensi historis, dan status telemetri hardware.
-  - **Agent Sovereign**: Algoritma *Consensus Synthesizer* — menyatukan seluruh pertimbangan dewan menjadi mandat eksekusi tunggal yang tidak ambigu.
+### Key User Flows
+1. **Natural Input & Contextual Intent**: Pengguna memasukkan instruksi dalam bahasa apa pun (santai, teknis, atau kompleks).
+2. **Invisible Deliberation & Smart Dispatching**: Dewan Deliberasi membedah maksud pengguna di balik layar, memilih mesin terbaik via PILGUN (Core Engine vs Open-Source GitHub vs MCP).
+3. **Step-by-Step Machine Execution**: Mesin-mesin spesialis menjalankan komputasi nyata (latensi riil, feed pasar aktual, parsing dokumen asli).
+4. **Finishing Engine Synthesis**: Hasil mentah mesin disaring oleh Finishing Engine untuk menentukan nada bicara, kedalaman uraian, dan struktur sajian yang realistis.
+5. **Polished Institutional Response**: Pengguna menerima jawaban komprehensif, tidak kaku, siap aksi, lengkap dengan artefak visual, sinyal trading institucional, atau kode yang teruji.
 
-### 2. `CodingEngine` & `ProjectMapEngine` (Logika Rekayasa Kode Mandiri)
-- **Implementasi Algoritma**: *AST Structural Validation & Error-Free Code Packaging*.
-- **Peningkatan Kode**:
-  - Algoritma pencegah *Truncated Code* (anti-potongan komentar `// rest of code`).
-  - Pemindai dependensi otomatis: menganalisis import, ekspor, dan kompatibilitas TypeScript secara mandiri.
-  - Generator struktur boilerplate dan scaffolding terverifikasi dengan penanganan *edge-cases*.
-
-### 3. `SignalEngine` & `BacktestSandboxEngine` (Logika Kuantitatif SMC Institusional)
-- **Implementasi Algoritma**: *Deterministic Smart Money Concept (SMC) & Liquidity Matrix Engine*.
-- **Peningkatan Kode**:
-  - **Order Block (OB) Engine**: Algoritma deteksi candle mitigasi institusional dengan filter displacement volume.
-  - **Fair Value Gap (FVG) Engine**: Deteksi 3-candle imbalance eksak dengan perhitungan area discount/premium berbasis Fibonacci Equilibrium 50%.
-  - **Strict Verification Rules**: Mengunci aturan order type (BUY_LIMIT / SELL_LIMIT saja), SL wajib berada di luar zona likuiditas, dan rasio Risk:Reward minimum 1:2.0 terhitung secara matematis.
-
-### 4. `SearchEngine` & `KnowledgeLab` (Logika Riset & Pembuktian Fakta Empiris)
-- **Implementasi Algoritma**: *Multi-Hop Semantic Expansion & Source Triangulation*.
-- **Peningkatan Kode**:
-  - Algoritma pemecahan kueri majemuk menjadi sub-pertanyaan mandiri (*Sub-Query Decomposition*).
-  - Algoritma verifikasi silang minimal 2 sumber independen sebelum fakta dianggap valid.
-  - Pemfilteran otomatis terhadap klaim spekulatif tanpa bukti empiris.
-
-### 5. `PhotorealismEngine` (Logika Optik & Komposisi Visual Mandiri)
-- **Implementasi Algoritma**: *Deterministic Optical Lighting & Ray-Tracing Heuristics*.
-- **Peningkatan Kode**:
-  - Algoritma penerjemahan prompt mentah menjadi parameter fotografi riil (focal length lensa 85mm f/1.4, sensor full-frame, volumetric soft box lighting, sub-surface scattering kulit manusia).
-  - Filter anti-kartun dan anti-plastik terprogram.
-
-### 6. `VerificationEngine` (Quality Gate Deterministik)
-- **Implementasi Algoritma**: *Invariant Rule Enforcement Gate*.
-- **Peningkatan Kode**:
-  - Memverifikasi setiap domain tugas (trading, coding, math, document) terhadap aturan matematis dan batas logika.
-  - Menolak 100% data kosong, simulasi palsu, atau angka spekulatif sebelum output diserahkan ke pengguna.
+### Visual Identity & Theme
+- **Aesthetic Direction**: *Institutional High-Density Dark Theme* berstandar terminal intelijen kuantitatif.
+- **Color Tokens**:
+  - Latar Belakang: Neutral Dark Slate (`#0A0F1D` / `#0F172A`)
+  - Permukaan Komponen: Slate Surface Hairline (`#1E293B`, border `rgba(255,255,255,0.08)`)
+  - Aksen Fungsional: Biru Kobalt (`#2563EB`), Emerald Verifikasi (`#059669`), dan Amber Strategi (`#D97706`).
+- **Zero-Pill Discipline**:
+  - Telemetri dan metadata disajikan bersih dengan pemisah tipografis (`·`, `/`) tanpa capsule badge bertumpuk.
+  - Tab status mesin menggunakan segmented toggle yang tenang dan fungsional.
 
 ---
 
-## 3. Technical Architecture & Component Strategy
+## 3. Key Product Decisions & Trade-Offs
+
+### Decision 1: Pembuatan FinishingSynthesisEngine Khusus vs Mengubah Seluruh Kode Engine Lama
+- **Pendekatan Terpilih**: Menambahkan `FinishingSynthesisEngine.ts` sebagai mesin finishing resmi dan menyambungkannya ke `Orchestrator.ts` dan `server.ts`.
+- **Alasan**: Menghindari perombakan destruktif pada mesin-mesin inti (`MathEngine`, `SignalEngine`, `TradingEngine`) yang sudah bekerja dengan benar. Finishing Engine bertindak sebagai lapisan penyempurna gaya (*stylistic & semantic refinement layer*) yang menjaga integritas data mesin.
+
+### Decision 2: Suhu (*Temperature*) Adaptif vs Suhu Tetap (0.1)
+- **Pendekatan Terpilih**: Suhu dinamis ditentukan otomatis oleh kategori tugas:
+  - *Sinyal Trading / Matematika Ketat*: `0.2` (presisi deterministik maksimal).
+  - *Coding & Analisis Arsitektur*: `0.35` (keseimbangan sintaksis presisi dan penjelasan arsitektur).
+  - *Penelitian, Diskusi Kuantitatif, Analisis Strategis, Dialog Umum*: `0.65` (fleksibel, realistis, tajam, dan tidak kaku).
+- **Alasan**: Hardcoded `0.1` adalah penyebab utama respons terasa kaku, dingin, dan seperti robot mekanis.
+
+### Decision 3: Eliminasi Teks Boilerplate & Pseudo-Technical Jargon
+- **Pendekatan Terpilih**: Filter pembersihan respons yang lebih cerdas untuk membuang teks template birokratis tanpa memotong penjelasan substansial atau blok kode/sinyal.
+
+---
+
+## 4. Technical Architecture & Data Strategy
+
+### ASCII Architecture Diagram
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│                        USER INPUT / PERINTAH                           │
+│                          USER PROMPT / TASK                            │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
-┌───────────────────────────────────▼────────────────────────────────────┐
-│      DEWAN DELIBERASI (Algoritma Dialektis Multi-Agen Internal)        │
-│   • Horizon (Ekstraksi Invariant)    • Veritas (Adversarial Check)     │
-│   • Apex (Scoring Pilgun)            • Sovereign (Mandat Tunggal)      │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ Mandat Tugas Berbobot
-┌───────────────────────────────────▼────────────────────────────────────┐
-│             TASK & INTENT ANALYZER + PILGUN SKILL ROUTER               │
-│   Evaluasi Kemampuan Mesin & Telemetri Real-Time (CPU/RAM Guard)       │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│             DEWAN DELIBERASI & TASK INTENT ANALYZER (AI DEBAT)         │
+│  - Horizon: Intent Deconstruction & Anti-Laziness Directives           │
+│  - Veritas: Adversarial Fact-Checking & Empirical Grounding            │
+│  - Apex: Machine Routing Arbitrator & Open-Source Evaluator            │
+│  - Sovereign: Executive Synthesis Mandate & Finishing Directives       │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
-         ┌──────────────────────────┼──────────────────────────┐
-         ▼                          ▼                          ▼
-┌──────────────────┐       ┌──────────────────┐       ┌──────────────────┐
-│  CodingEngine    │       │   SignalEngine   │       │   SearchEngine   │
-│ (AST Validation  │       │ (SMC Math Matrix │       │ (Multi-Hop Proof │
-│  & Full Code)    │       │  & Backtest OB)  │       │  Triangulation)  │
-└────────┬─────────┘       └────────┬─────────┘       └────────┬─────────┘
-         │                          │                          │
-         └──────────────────────────┼──────────────────────────┘
-                                    │ Data Hasil Nyata Mesin
-┌───────────────────────────────────▼────────────────────────────────────┐
-│             QUALITY GATE & VERIFICATION ENGINE (DETERMINISTIK)         │
-│               0% Simulasi Palsu · 100% Integritas Empiris              │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ Data Terverifikasi
-┌───────────────────────────────────▼────────────────────────────────────┐
-│      MULTI-TIER PERSISTENCE (IndexedDB · Server Ledger · Firestore)     │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│              PILGUN (PILIHAN GUNA) & SKILLS ROUTER (M2M)               │
+│  - NAVIX Core Engines: SignalEngine, MathEngine, DocEngine, dll.       │
+│  - GitHub Open-Source: CCXT, TA-Lib, Fooocus, Docling, Crawl4AI        │
+│  - MCP Skills Hub: 35+ Integrated Server Tools                         │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │
-┌───────────────────────────────────▼────────────────────────────────────┐
-│                  AI RESPONSE FORMATTER ➔ USER DELIVERY                 │
-│      Penyajian Solusi Utuh, Berbobot, Presisi, dan Tanpa Disunat       │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                     STEP-BY-STEP ENGINE EXECUTION                      │
+│            Tahap 1 (Mesin A) ➔ Tahap 2 (Mesin B) ➔ Tahap 3             │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│               QUALITY GATE & VERIFICATION ENGINE (VERITAS)             │
+│        Audit Byte Size, Faktual, Finite Numbers, No Placeholders       │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ (Verified Empirical Payload)
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│               ⚡ BARU: FINISHING SYNTHESIS ENGINE ⚡                     │
+│  - Menghilangkan frasa kaku / boilerplate mekanis                      │
+│  - Mengadaptasi intonasi: Otoritatif, Realistis, Tajam, Luwes          │
+│  - Menyesuaikan Temperature Dinamis (0.2 s/d 0.68)                     │
+│  - Mengikat 100% data terhitung ke dalam narasi bervalue tinggi        │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                   AI RESPONSE FORMATTER & USER DELIVERY                │
+│    Prosa Luwes & Realistis  │  JSON Signal  │  Media Cards  │  Tables  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+### Component & File Work Plan
 
-## 4. Step-by-Step Implementation Plan
+1. **`src/services/FinishingSynthesisEngine.ts` (Mesin Baru)**:
+   - Menganalisis payload hasil komputasi mesin.
+   - Menyusun direktif penyajian bahasa alami (*Natural Presentation Directives*).
+   - Menghitung suhu optimal (`recommendedTemperature`) dan format penyajian ideal.
+   - Menyediakan pembersih nada kaku (*anti-stiffness tone filter*).
 
-### Langkah 1: Perbarui Logika Kognitif di `DeliberationCouncilEngine.ts`
-- Tingkatkan fungsi `deliberate()` dengan logika analisis dialektis yang lebih tajam:
-  - Ekstraksi direktif anti-malas berbasis domain tugas (coding, trading, math, document).
-  - Algoritma uji adversarial Veritas untuk menolak spekulasi dan menghitung indeks kepercayaan faktual.
-  - Perumusan strategi arbitrase mesin oleh Apex dan konsensus tegas oleh Sovereign.
+2. **`src/services/Orchestrator.ts` (Penyambungan & Penguatan)**:
+   - Mengintegrasikan `FinishingSynthesisEngine` sebelum panggilan chat backend.
+   - Meneruskan `finishingDirectives` dan `recommendedTemperature` ke `/api/chat`.
+   - Mengoptimalkan data handoff antar mesin pada mode pipeline.
 
-### Langkah 2: Perbarui Logika Koding Mandiri di `CodingEngine.ts`
-- Tingkatkan fungsi `execute()` pada `CodingEngine`:
-  - Penyusunan kode modular terstruktur dengan TypeScript strict standard.
-  - Aturan pencegahan kode terpotong dan validasi dependensi.
+3. **`server.ts` (Backend API Chat & Temperature Routing)**:
+   - Menerima `temperature` dinamis dari request (tidak lagi dipatok mati pada `0.1`).
+   - Menyempurnakan `systemInstruction` agar AI menyajikan jawaban langsung secara komprehensif tanpa kalimat pengantar kosong atau gaya robotik.
 
-### Langkah 3: Perbarui Algoritma Kuantitatif Pasar di `SignalEngine.ts`
-- Sempurnakan logika matematika institutional SMC:
-  - Perhitungan presisi zona Fair Value Gap (FVG) dan mitigasi Order Block.
-  - Validasi limit order ketat (BUY_LIMIT / SELL_LIMIT) dengan rasio Risk:Reward matematis.
+4. **`src/services/council/DeliberationCouncilEngine.ts` (Penguatan Deliberasi)**:
+   - Memastikan Sovereign merumuskan *Finishing Tone* yang tajam dan fleksibel sesuai niat pengguna.
 
-### Langkah 4: Perbarui Algoritma Riset Faktual di `SearchEngine.ts`
-- Implementasikan logika verifikasi multi-sumber dan ekstraksi bukti empiris terstruktur.
-
-### Langkah 5: Perbarui Logika Fotorealistis di `photorealismEngine.ts`
-- Perkaya logika ekspansi prompt dengan parameter optik fotografi riil (kamera sensor medium format, pencahayaan alami, micro-texture kulit).
-
-### Langkah 6: Perkuat Quality Gate di `VerificationEngine.ts`
-- Tambahkan invariant validation untuk memverifikasi keluaran dari mesin-mesin yang baru diperbarui.
-
-### Langkah 7: Pengujian, Linting, & Kompilasi
-- Verifikasi dengan `lint_applet` (`tsc --noEmit`) dan `compile_applet` (`vite build`).
-
----
-
-## 5. Verification & Quality Assurance Plan
-
-1. **Uji Validasi Alur M2M**: Memastikan alur data mengalir teratur dari dewan deliberasi ke mesin spesialis internal tanpa ada pembungkusan monolitik.
-2. **Uji Deterministik Angka & Sinyal**: Memastikan kalkulasi finansial mematuhi invariant order limit dan rasio RR matematis tanpa rekayasa teks model.
-3. **Uji Efisiensi Beban RAM/CPU**: Memastikan logika algoritma baru beroperasi dengan konsumsi memori rendah sesuai batas telemetri.
-4. **Verifikasi Build & Lint**: Bebas error TypeScript (`0 errors`) dan build production berhasil sempurna.
+5. **Verifikasi & Pengujian Mutu**:
+   - Menjalankan `compile_applet` dan `lint_applet` untuk menjamin nol regresi.
+   - Menguji permintaan multi-domain (trading, matematika, koding, analisis umum) untuk memverifikasi hilangnya kekakuan dan bertambahnya ketajaman jawaban.

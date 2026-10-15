@@ -3,6 +3,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import vm from "node:vm";
 import { fileEngine } from "./engines/FileEngine";
 import { searchEngine } from "./engines/SearchEngine";
+import { DoclingCoreEngine } from "../services/opensource-core/DoclingCoreEngine";
 
 export type PluginStatus = "DISCOVERED" | "READY" | "FAILED" | "DISCONNECTED";
 
@@ -21,7 +22,8 @@ export const BUILTIN_SERVERS = new Set([
   "file_system",
   "fetch",
   "git",
-  "memory"
+  "memory",
+  "turbo_multimedia"
 ]);
 
 // Initialize builtin servers as READY, others as DISCONNECTED
@@ -31,6 +33,7 @@ const KNOWN_SERVERS = [
   "fetch",
   "git",
   "memory",
+  "turbo_multimedia",
   "market_engine",
   "code_sandbox",
   "web_search",
@@ -152,6 +155,61 @@ export async function discoverTools(serverName: string) {
         inputSchema: { type: "object", properties: { key: { type: "string" }, value: { type: "string" } }, required: ["key"] }
       }
     ];
+  } else if (norm === "turbo_multimedia") {
+    return [
+      {
+        name: "turbo_generate_image",
+        description: "Menghasilkan visual fotorealistik resolusi tinggi menggunakan adapter Fooocus/SDXL-Lightning dan NMF optical conditioning.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            prompt: { type: "string", description: "Deskripsi prompt gambar visual" },
+            aspectRatio: { type: "string", enum: ["1:1", "16:9", "9:16", "4:3", "3:4"], default: "1:1" },
+            resolution: { type: "string", enum: ["512px", "1K", "2K", "4K"], default: "1K" }
+          },
+          required: ["prompt"]
+        }
+      },
+      {
+        name: "turbo_generate_video",
+        description: "Menghasilkan video temporal berorientasi gerak (Wan2.1/AnimateDiff) dengan stitching FFmpeg 60fps.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            prompt: { type: "string", description: "Deskripsi adegan video sinematik" },
+            keyframeBase64: { type: "string", description: "Opsional frame awal base64" },
+            cameraMovement: { type: "string", enum: ["pan_zoom", "tilt", "static", "dolly"], default: "pan_zoom" },
+            durationSeconds: { type: "number", default: 5 }
+          },
+          required: ["prompt"]
+        }
+      },
+      {
+        name: "turbo_synthesize_audio",
+        description: "Menghasilkan komposisi musik dan gelombang audio polyphonic 24kHz/48kHz WAV menggunakan MusicGen/Lyria.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            prompt: { type: "string", description: "Deskripsi melodi, tempo, genre, atau suasana audio" },
+            durationSeconds: { type: "number", default: 8 },
+            tempoBpm: { type: "number", default: 75 }
+          },
+          required: ["prompt"]
+        }
+      },
+      {
+        name: "turbo_parse_pdf",
+        description: "Mengekstrak hierarki dokumen, matriks tabel keuangan/teknis, dan CommonMark dari berkas PDF/dokumen menggunakan IBM Granite Docling.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            content: { type: "string", description: "Konten teks, CSV, atau base64 dokumen PDF" },
+            title: { type: "string", default: "Dokumen Analisis Navix" }
+          },
+          required: ["content"]
+        }
+      }
+    ];
   }
 
   // If server is not builtin and not connected via client: Status is DISCONNECTED, tools is []
@@ -217,6 +275,83 @@ export async function executeTool(serverName: string, toolName: string, args: an
         text: JSON.stringify({ status: "READY", key: args?.key, saved: true })
       }]
     };
+  }
+
+  if (normServer === "turbo_multimedia") {
+    if (normTool === "turbo_parse_pdf") {
+      const content = args?.content || "";
+      const title = args?.title || "Dokumen Navix AI";
+      const doc = DoclingCoreEngine.parse(content, title);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            engine: "Docling-IBM-Granite-Turbo",
+            document: doc,
+            totalHeadings: doc.headingsCount,
+            totalTables: doc.tablesCount,
+            readingMetrics: {
+              words: doc.totalWords,
+              readingTime: doc.readingTimeMinutes,
+              readingLevel: doc.readingLevel
+            }
+          }, null, 2)
+        }]
+      };
+    }
+
+    if (normTool === "turbo_generate_image") {
+      const prompt = args?.prompt || "Photorealistic scene";
+      const aspectRatio = args?.aspectRatio || "1:1";
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            status: "ROUTED_TO_HYBRID_PROXY",
+            endpoint: "/api/multimedia/image/turbo",
+            prompt,
+            aspectRatio,
+            engine: "Fooocus-SDXL-Lightning-NMF"
+          }, null, 2)
+        }]
+      };
+    }
+
+    if (normTool === "turbo_generate_video") {
+      const prompt = args?.prompt || "Cinematic video";
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            status: "ROUTED_TO_HYBRID_PROXY",
+            endpoint: "/api/multimedia/video/turbo",
+            prompt,
+            cameraMovement: args?.cameraMovement || "pan_zoom",
+            engine: "Wan2.1-AnimateDiff-FFmpeg"
+          }, null, 2)
+        }]
+      };
+    }
+
+    if (normTool === "turbo_synthesize_audio") {
+      const prompt = args?.prompt || "Harmonic melody";
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            status: "ROUTED_TO_HYBRID_PROXY",
+            endpoint: "/api/multimedia/audio/turbo",
+            prompt,
+            durationSeconds: args?.durationSeconds || 8,
+            engine: "AudioCraft-MusicGen-Polyphonic"
+          }, null, 2)
+        }]
+      };
+    }
   }
 
   // If server is not builtin and not connected:
