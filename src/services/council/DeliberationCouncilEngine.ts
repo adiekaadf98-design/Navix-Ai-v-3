@@ -119,10 +119,16 @@ export class DeliberationCouncilEngine {
     }
 
     // 2. Pertanyaan konsep murni, edukasi teoretis, atau dialog umum tanpa kebutuhan feed bursa atau generator media
-    const isConceptual = /^(jelaskan|ceritakan|apa itu|bagaimana|mengapa|apa arti|apa maksud|definisi|filosofi|pendapatmu|uraikan|apa yang dimaksud|tolong jelaskan)\b/i.test(q);
+    const isConceptual = /^(jelaskan|ceritakan|apa itu|bagaimana|mengapa|apakah|adakah|apa arti|apa maksud|definisi|filosofi|pendapatmu|uraikan|apa yang dimaksud|tolong jelaskan|menurutmu|bisa kamu jelaskan)\b/i.test(q);
     const hasExternalTrigger = /(trading|crypto|kripto|saham|forex|gold|xauusd|btcusdt|harga|market|candle|gambar|lukis|foto|video|lagu|musik|audio|github|repo|pip install|npm install|hack|penetration|audit payload|soal pilgun)/i.test(q);
 
     if (isConceptual && !hasExternalTrigger) {
+      return true;
+    }
+
+    // 3. Diskusi status operasional, konfirmasi arsitektur, atau percakapan langsung tanpa pemicu mesin eksternal
+    const isSystemDiscussion = (q.includes('navix') || q.includes('standar') || q.includes('sistem') || q.includes('perintah') || q.includes('tanya') || q.includes('kuatkan')) && !hasExternalTrigger;
+    if (isSystemDiscussion) {
       return true;
     }
 

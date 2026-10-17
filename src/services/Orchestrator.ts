@@ -20,6 +20,16 @@ import { globalFailureRecovery } from './FailureRecoveryEngine';
 import { rotateFetch } from '../lib/apiKeyRotator';
 import { globalDeliberationVault } from './DeliberationVaultService';
 import { globalFinishingEngine } from './FinishingSynthesisEngine';
+import { globalTaskRoutingEnforcer } from './TaskRoutingEnforcer';
+import { globalUniversalDataBus, UniversalDataEnvelope } from './UniversalDataBus';
+import { globalUserMandateRegistry } from './UserMandateRegistry';
+import { globalAutonomousGoalEngine } from './AutonomousGoalEngine';
+import { globalFormalProofEngine, FormalProofHierarchy } from './FormalProofReasoningEngine';
+import { globalCognitiveSyncEngine } from './HyperDensityCognitiveSyncEngine';
+import { globalSkillsSync } from './GlobalSkillsCatalogSync';
+import { globalFrontierBenchmark, FrontierBenchmarkAudit } from './FrontierBenchmarkSentinel';
+import { globalTelemetryDispatcher, TelemetryResourceStatus } from './telemetry/SystemTelemetryDispatcher';
+import { EngineTraceData } from '../types';
 
 
 /**
@@ -132,6 +142,9 @@ export interface OrchestratorResponse {
   error?: string;
   isRateLimit?: boolean;
   systemInstruction?: string;
+  engineTrace?: EngineTraceData;
+  proofHierarchy?: FormalProofHierarchy;
+  frontierBenchmark?: FrontierBenchmarkAudit;
 }
 
 export function sanitizeUserDelivery(raw: string): string {
@@ -263,6 +276,12 @@ export class NavixOrchestrator {
       }
 
       // =========================================================================
+      // STEP 0: Fail-Closed Task Routing Enforcer & Universal Data Bus (UIEB)
+      // =========================================================================
+      const enforcedRoute = globalTaskRoutingEnforcer.enforceRouting(req.message, req.attachments?.length || 0);
+      const uiebEnvelope = globalUniversalDataBus.createEnvelope(req.message, enforcedRoute.domain);
+
+      // =========================================================================
       // STEP 1: Cognitive Grounding & Deliberation Council (AI Debat & Pilgun Arbiter)
       // Multi-Agent Deliberation Council (Horizon, Veritas, Apex, Sovereign)
       // =========================================================================
@@ -294,8 +313,10 @@ export class NavixOrchestrator {
         preferredEngine: councilVerdict.recommendedEngine.selectedEngine || councilVerdict.recommendedEngine.primaryEngine
       });
 
-      if (granularSelection.telemetryDegraded) {
-        notify("supervisor_state", "pending", `Telemetry Guard: CPU ${liveTelemetry.cpuPercent}% / Heap ${liveTelemetry.memoryHeapMb}MB. Penyesuaian rute engine adaptif.`);
+      const resourceStatus = globalTelemetryDispatcher.evaluateSaturation(liveTelemetry, hardwareProfile);
+
+      if (granularSelection.telemetryDegraded || resourceStatus.isSaturated) {
+        notify("supervisor_state", "pending", `Telemetry Guard: CPU ${liveTelemetry.cpuPercent}% / Heap ${liveTelemetry.memoryHeapMb}MB. ${resourceStatus.recommendationReason}`);
       }
 
       console.log(`[Orchestrator] 🚀 Granular Engine & Telemetry Evaluation:`, {
@@ -417,11 +438,33 @@ export class NavixOrchestrator {
         console.log(`[Orchestrator] 🧠 Intent & Task Analysis:`, executionPlan);
         console.log(`[Orchestrator] ⚡ Granular Hardware Selection:`, granularSelection);
 
-        if (executionPlan.mode === 'DIRECT_CHAT') {
+        const autonomousGoalPlan = globalAutonomousGoalEngine.evaluateGoal(req.message);
+        if (autonomousGoalPlan.isAutonomousTarget) {
+          notify("engine_started", "pending", `Menjalankan Otomasi Target Otonom (${autonomousGoalPlan.stages.length} Tahap Berantai)`);
+          console.log(`[AutonomousGoalEngine] 🎯 Autonomous Target Detected: ${autonomousGoalPlan.domain} (${autonomousGoalPlan.stages.length} stages)`);
+          const autoResult = await globalAutonomousGoalEngine.executeAutonomousGoal(
+            autonomousGoalPlan,
+            { message: req.message, attachments: req.attachments },
+            (idx, total, msg) => {
+              notify("engine_progress", "pending", `[Tahap ${idx}/${total}] ${msg}`);
+            }
+          );
+          engineName = 'AutonomousGoalEngine';
+          engineResult = autoResult.finalArtifact || {
+            status: autoResult.status === 'COMPLETED' ? 'SUCCESS' : 'PARTIAL',
+            output: autoResult,
+            message: autoResult.summaryReport,
+            latencyMs: autoResult.totalDurationMs
+          };
+        } else if (executionPlan.mode === 'DIRECT_CHAT' && !enforcedRoute.isMachineMandatory) {
           console.log(`[Orchestrator] 💬 Fast-path Dialogis Murni (AI Debat -> Main Chat): Tanpa pemanggilan worker engine.`);
           engineName = 'AI_DEBATE';
           engineResult = null;
         } else {
+          if (enforcedRoute.isMachineMandatory && (executionPlan.mode === 'DIRECT_CHAT' || executionPlan.primaryEngine === 'DefaultEngine')) {
+            console.log(`[TaskRoutingEnforcer] 🔒 Enforcing mandatory machine execution for domain [${enforcedRoute.domain}]: [${enforcedRoute.primaryEngine}]`);
+            executionPlan.primaryEngine = enforcedRoute.primaryEngine;
+          }
           // Dinamis prioritaskan engine terspesialisasi dari Granular Selection berdasarkan kompleksitas & hardware
           if (executionPlan.mode !== 'MULTI' && granularSelection.primaryEngine && granularSelection.primaryEngine !== 'DefaultEngine' && globalEngineRegistry.hasEngine(granularSelection.primaryEngine)) {
             console.log(`[Orchestrator] 🎯 Granular Provider Priority: [${granularSelection.primaryEngine}] over [${executionPlan.primaryEngine}] (Reason: ${granularSelection.rationale})`);
@@ -438,6 +481,20 @@ export class NavixOrchestrator {
           }
 
           engineName = executionPlan.primaryEngine;
+
+          // Evaluasi Rute Telemetri Dinamis untuk Mencegah Saturasi Beban (100% Utuh Tanpa Pemotongan)
+          const effectiveDomain = enforcedRoute.domain || boosterData?.council?.category || 'general';
+          const offloadDecision = globalTelemetryDispatcher.decideTaskRoute(
+            effectiveDomain,
+            engineName,
+            resourceStatus
+          );
+
+          if (offloadDecision.shouldOffloadToServer) {
+            console.log(`[Orchestrator] 🚀 Telemetry-Driven Offload: ${offloadDecision.dispatchReason}`);
+            notify("supervisor_state", "pending", offloadDecision.dispatchReason);
+          }
+
           notify("engine_started", "pending", `Dispatching to ${engineName} (Hardware Tier: ${hardwareProfile.deviceTier.toUpperCase()})`);
 
           if (executionPlan.mode === 'MULTI' && executionPlan.tasks.length > 1) {
@@ -449,7 +506,7 @@ export class NavixOrchestrator {
                 goal: req.message,
                 steps: executionPlan.tasks,
                 hardwareProfile,
-                streamMode: granularSelection.resourceAllocation.streamMode
+                streamMode: offloadDecision.streamMode || granularSelection.resourceAllocation.streamMode
               });
               engineName = 'AgentEngine';
             }
@@ -469,7 +526,8 @@ export class NavixOrchestrator {
                 attachments: req.attachments,
                 hardwareProfile,
                 telemetry: liveTelemetry,
-                streamMode: granularSelection.resourceAllocation.streamMode,
+                resourceStatus,
+                streamMode: offloadDecision.streamMode || granularSelection.resourceAllocation.streamMode,
                 resourceBudgetMb: granularSelection.resourceAllocation.estimatedMemoryMb,
                 cpuPriority: granularSelection.resourceAllocation.cpuPriority
               };
@@ -622,6 +680,22 @@ export class NavixOrchestrator {
         }
       }
 
+      if (engineResult) {
+        const isEngineSuccess = engineResult.status === 'SUCCESS' || engineResult.status === 'COMPLETED' || engineResult.status === 'success' || Boolean(engineResult.realOutput || engineResult.data);
+        uiebEnvelope.qualityGatePassed = isEngineSuccess && (!gateVerification || gateVerification.passed);
+        globalUniversalDataBus.recordStage(uiebEnvelope, {
+          engineName,
+          category: engineName.includes('GitHub') || engineName.includes('Crawl') || engineName.includes('SearX') || engineName.includes('Docling') ? 'opensource' : 'core',
+          action: enforcedRoute.pipelineSequence[0]?.action || `Execution of ${engineName}`,
+          status: isEngineSuccess ? 'SUCCESS' : 'FAILED',
+          inputPayload: { query: req.message },
+          outputData: engineResult.realOutput || engineResult.output || engineResult.data || engineResult,
+          latencyMs: engineResult.latencyMs || 25,
+          verificationScore: gateVerification?.score || 100,
+          error: engineResult.error
+        });
+      }
+
       // Step: AI Response Formatter & Tri-Tier Deliberation Vault Persistence
       // AI receives the validated real output from the engine and structures the final chat response
       notify("verification_started", "pending", "AI Formatting Verified Output");
@@ -710,15 +784,14 @@ export class NavixOrchestrator {
         messageToSend += `Hasilkan jawaban, kode, solusi, atau analisis akhir secara utuh, presisi, tuntas, dan sangat akurat. Dilarang memberikan teks penjelasan singkat tanpa jawaban asli.`;
       }
       
-      // NAVIX Cognitive Memory v2 Retrieval - Dinonaktifkan sementara untuk penghematan token (Token Diet)
-      // agar AI murni hanya fokus pada history di sesi obrolan yang sedang berjalan.
+      // NAVIX Hyper-Density Cognitive Memory Sync (Sub-15ms Cross-Session Associative Recall)
       try {
-        // const { promptContext } = await navixMemoryEngine.retrieveContext(req.message);
-        // if (promptContext) {
-        //   messageToSend += promptContext;
-        // }
+        const cognitiveRecall = globalCognitiveSyncEngine.recallContext(req.message);
+        if (cognitiveRecall.hasRelevantMemory) {
+          messageToSend += `\n\n${cognitiveRecall.promptInjectionSnippet}\n`;
+        }
       } catch (memErr) {
-        console.warn('Navix Cognitive Memory retrieval warning:', memErr);
+        console.warn('[Orchestrator] Cognitive Sync Recall warning:', memErr);
       }
 
       const imageIntent = analyzeImageIntent(req.message, req.attachments, req.history);
@@ -762,6 +835,10 @@ export class NavixOrchestrator {
       finalMessageToSend += `- Nada Utama: ${finishingMandate.tone}\n`;
       finalMessageToSend += `- Arahan Presentasi: ${finishingMandate.naturalFramingDirective}\n`;
       finalMessageToSend += `- Aturan Anti-Kekakuan: ${finishingMandate.antiStiffnessRules.join('; ')}\n`;
+
+      // Penegakan Mandat Mutlak Pengguna (Zero-Disobedience Policy)
+      const userMandatePrompt = globalUserMandateRegistry.generateMandatePrompt();
+      finalMessageToSend += `\n\n${userMandatePrompt}\n`;
 
       const res = await rotateFetch('/api/chat', {
         method: 'POST',
@@ -830,6 +907,13 @@ export class NavixOrchestrator {
         // Strict Anti-Internal-Context-Leakage Filter & Finishing Tone Polish:
         // Strip any echoed internal control metadata tags, debug prompts, or internal directives
         responseText = globalFinishingEngine.polishFinalResponse(sanitizeUserDelivery(responseText));
+
+        // Strict Compliance Audit against User Mandate (Zero-Disobedience Enforcer)
+        const mandateAudit = globalUserMandateRegistry.auditCompliance(responseText, enforcedRoute.domain);
+        if (!mandateAudit.compliant) {
+          console.warn('[UserMandateRegistry] Compliance violations corrected:', mandateAudit.violations);
+          responseText = mandateAudit.cleanedText;
+        }
         
         // Connect Signal Card to Main Chat if retail trader or signal engine produced real trading signals
         if (engineResult?.data?.instantSignalEligibility && !responseText.includes('```json signal') && !responseText.includes('```signal')) {
@@ -853,10 +937,32 @@ export class NavixOrchestrator {
           responseText += `\n\n\`\`\`json signal\n${JSON.stringify(signalPayload, null, 2)}\n\`\`\`\n`;
         }
 
+        const engineTraceSummary = uiebEnvelope.stages.length > 0 
+          ? globalUniversalDataBus.getInspectorSummary(uiebEnvelope) 
+          : undefined;
+
+        const proofHierarchy = globalFormalProofEngine.generateProofHierarchy(
+          req.message,
+          enforcedRoute.domain,
+          engineResult?.realOutput || engineResult?.output || engineResult?.data || engineResult
+        );
+
+        const frontierBenchmark = globalFrontierBenchmark.generateComparativeBenchmark(
+          req.message,
+          enforcedRoute.domain,
+          engineResult?.latencyMs || 25
+        );
+
         return {
           text: responseText,
           audioBase64: data.audioBase64,
-          systemInstruction: data.systemInstruction
+          systemInstruction: data.systemInstruction,
+          engineTrace: engineTraceSummary ? {
+            ...engineTraceSummary,
+            primaryEngine: engineName
+          } : undefined,
+          proofHierarchy,
+          frontierBenchmark
         };
       } else {
         return { error: data.error || 'Unknown Error' };

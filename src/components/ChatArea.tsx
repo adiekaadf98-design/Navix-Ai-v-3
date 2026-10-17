@@ -13,6 +13,12 @@ import { ScienceCard, ScienceData } from './ScienceCard';
 import { TrackerCard, TrackerData } from './TrackerCard';
 import { ShadowEngineCard, ShadowEngineData } from './ShadowEngineCard';
 import { StudioAppCard, StudioAppBlockData } from './StudioAppCard';
+import { EngineTraceInspector } from './EngineTraceInspector';
+import { FormalProofHierarchyInspector } from './FormalProofHierarchyInspector';
+import { FrontierBenchmarkCard } from './FrontierBenchmarkCard';
+import { EngineTraceData } from '../types';
+import type { FormalProofHierarchy } from '../services/FormalProofReasoningEngine';
+import type { FrontierBenchmarkAudit } from '../services/FrontierBenchmarkSentinel';
 
 import { analyzeImageIntent } from '../services/Orchestrator';
 import { ThinkingIndicator, ThinkingStateData } from './ThinkingIndicator';
@@ -193,7 +199,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
     td: ({children}: any) => <td className="px-3 md:px-4 py-2 md:py-3 text-neutral-300 border-x border-neutral-800/50 first:border-l-0 last:border-r-0">{children}</td>,
   };
 
-  const MemoizedMessageContent = memo(({ text, role, msgId, messagesRef }: { text: string, role: string, msgId?: string, messagesRef: React.MutableRefObject<ChatMessage[]> }) => {
+  const MemoizedMessageContent = memo(({ text, role, msgId, messagesRef, engineTrace, proofHierarchy, frontierBenchmark }: { text: string, role: string, msgId?: string, messagesRef: React.MutableRefObject<ChatMessage[]>, engineTrace?: EngineTraceData, proofHierarchy?: FormalProofHierarchy, frontierBenchmark?: FrontierBenchmarkAudit }) => {
     return useMemo(() => {
 
     if (role === 'user') {
@@ -454,9 +460,21 @@ const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
             <TrackerCard data={trackerData} />
           </div>
         )}
+
+        {engineTrace && (
+          <EngineTraceInspector trace={engineTrace} />
+        )}
+
+        {proofHierarchy && (
+          <FormalProofHierarchyInspector proof={proofHierarchy} />
+        )}
+
+        {frontierBenchmark && (
+          <FrontierBenchmarkCard benchmark={frontierBenchmark} />
+        )}
       </div>
     );
-    }, [text, role, msgId]);
+    }, [text, role, msgId, engineTrace, proofHierarchy, frontierBenchmark]);
   });
 
 
@@ -1285,7 +1303,7 @@ Peran Anda: ORCHESTRATOR UTAMA YANG SANGAT CERDAS & AGRESIF.
                           ? 'bg-neutral-800 text-neutral-100 rounded-3xl rounded-tr-sm px-4 md:px-5 py-2.5 md:py-3 text-sm md:text-base shadow-sm' 
                           : 'text-neutral-200 leading-relaxed w-full py-1'
                       }`}>
-                        <MemoizedMessageContent text={msg.text} role={msg.role} msgId={msg.id} messagesRef={messagesRef} />
+                        <MemoizedMessageContent text={msg.text} role={msg.role} msgId={msg.id} messagesRef={messagesRef} engineTrace={msg.engineTrace} proofHierarchy={msg.proofHierarchy} frontierBenchmark={msg.frontierBenchmark} />
                       </div>
                     )}
                     {msg.attachments && renderMessageAttachments(msg.attachments)}

@@ -205,12 +205,20 @@ function MainChatApp() {
         timestamp: new Date(),
         attachments: data.audioBase64 ? [{ type: 'audio', url: `data:audio/wav;base64,${data.audioBase64}`, mimeType: 'audio/wav' }] : undefined,
         thinkingState: finalThinkingState,
+        engineTrace: data.engineTrace,
+        proofHierarchy: data.proofHierarchy,
+        frontierBenchmark: data.frontierBenchmark,
       };
 
       setSessions((current) => current.map((s) => s.id === target ? { ...s, messages: [...s.messages, aiMsg], updatedAt: new Date() } : s));
       firestoreSync.saveMessage(target, aiMsg).catch(() => {});
     } catch (error: any) {
-      setSessions((current) => current.map((s) => s.id === target ? { ...s, messages: [...s.messages, { id: aiMsgId, role: 'ai', text: `⚠️ ${error.message || 'Gagal terhubung ke AI'}`, timestamp: new Date() }], updatedAt: new Date() } : s));
+      const errMsg = error?.message || 'Gagal terhubung ke AI';
+      const isRateLimit = errMsg.includes('429') || errMsg.toLowerCase().includes('quota') || errMsg.toLowerCase().includes('rate limit');
+      const userFriendlyText = isRateLimit
+        ? `⚠️ Kuota model AI bawaan sedang padat/tercapai (HTTP 429). Silakan tambahkan atau aktifkan API Key cadangan Anda di menu Pengaturan (Settings ➔ API Keys) agar sistem dapat langsung beroperasi tanpa batas kuota.`
+        : `⚠️ ${errMsg}`;
+      setSessions((current) => current.map((s) => s.id === target ? { ...s, messages: [...s.messages, { id: aiMsgId, role: 'ai', text: userFriendlyText, timestamp: new Date() }], updatedAt: new Date() } : s));
     } finally {
       setIsLoading(false);
       setThinkingState(undefined);

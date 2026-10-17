@@ -6,6 +6,31 @@ export interface Attachment {
   name?: string;
 }
 
+export interface EngineTraceStage {
+  index: number;
+  engine: string;
+  category: string;
+  action: string;
+  status: string;
+  latencyMs: number;
+  score: number;
+  fallbackUsed?: string;
+  hasOutput: boolean;
+}
+
+export interface EngineTraceData {
+  traceId: string;
+  domain: string;
+  primaryEngine: string;
+  totalLatencyMs: number;
+  stagesCount: number;
+  qualityGatePassed: boolean;
+  stages: EngineTraceStage[];
+}
+
+import type { FormalProofHierarchy } from './services/FormalProofReasoningEngine';
+import type { FrontierBenchmarkAudit } from './services/FrontierBenchmarkSentinel';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'ai';
@@ -14,6 +39,9 @@ export interface ChatMessage {
   attachments?: Attachment[];
   systemInstruction?: string;
   thinkingState?: any;
+  engineTrace?: EngineTraceData;
+  proofHierarchy?: FormalProofHierarchy;
+  frontierBenchmark?: FrontierBenchmarkAudit;
 }
 
 export interface ChatSession {

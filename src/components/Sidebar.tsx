@@ -9,6 +9,7 @@ import { ChatSession, NavixAppView } from '../types';
 import { SettingsModal } from './SettingsModal';
 import { ExploreModal } from './ExploreModal';
 import { PaymentModal } from './PaymentModal';
+import { MachineFleetStatusModal } from './MachineFleetStatusModal';
 import { useAuthStore } from '../store/useAuthStore';
 import { isDeveloperEmail } from '../services/auth';
 
@@ -44,6 +45,7 @@ export function Sidebar({
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isExploreOpen, setIsExploreOpen] = useState(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [isFleetModalOpen, setIsFleetModalOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<'history' | 'studios'>('history');
   const [sessionSearch, setSessionSearch] = useState('');
   const [isMobile, setIsMobile] = useState(false);
@@ -501,6 +503,23 @@ export function Sidebar({
             {(isOpen || isMobile) && <span className="text-xs font-semibold">Jelajah Ekosistem</span>}
           </button>
 
+          {/* Armada & Penegakan Mandat Mesin */}
+          <button 
+            onClick={() => handleAction(() => setIsFleetModalOpen(true))} 
+            className={`w-full min-h-[38px] flex items-center gap-2.5 py-1.5 px-2.5 rounded-xl text-neutral-300 hover:text-white hover:bg-neutral-800/80 transition-colors ${
+              !isOpen && !isMobile ? 'justify-center px-0' : ''
+            }`}
+            title="Armada & Penegakan Mandat Mesin"
+          >
+            <Activity size={17} className="text-emerald-400" />
+            {(isOpen || isMobile) && (
+              <div className="flex items-center justify-between flex-1">
+                <span className="text-xs font-semibold">Armada & Mandat</span>
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">100%</span>
+              </div>
+            )}
+          </button>
+
           {/* Pengaturan */}
           <button 
             onClick={() => handleAction(() => setIsSettingsOpen(true))} 
@@ -543,6 +562,7 @@ export function Sidebar({
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <ExploreModal isOpen={isExploreOpen} onClose={() => setIsExploreOpen(false)} />
+      <MachineFleetStatusModal isOpen={isFleetModalOpen} onClose={() => setIsFleetModalOpen(false)} />
       {isPaymentOpen && (
         <PaymentModal plan="pro" onClose={() => setIsPaymentOpen(false)} />
       )}

@@ -45,6 +45,10 @@ import { globalConcurrencyManager } from './concurrency/EngineConcurrencyManager
 import { globalComputerInteractionEngine } from './skills/browser/ComputerInteractionEngine';
 import { globalContextBuilderEngine } from '../memory/ContextBuilder';
 import { FinishingSynthesisEngine, globalFinishingEngine } from './FinishingSynthesisEngine';
+import { globalDeepForensicEngine } from './frontier/DeepForensicAuditEngine';
+import { globalBioGenomicsEngine } from './frontier/BioGenomicsScienceEngine';
+import { globalMacroGeoEconomicEngine } from './frontier/MacroGeoEconomicEngine';
+import { globalAutonomousSimulationEngine } from './frontier/AutonomousSimulationEngine';
 
 
 // When executing in the browser, always use the current window origin / relative path via API Key Router.
@@ -3750,6 +3754,20 @@ export class ProjectMapEngineAdapter implements IEngine {
   }
 }
 globalEngineRegistry.registerEngine(new ProjectMapEngineAdapter());
+
+// Pendaftaran 4 Mesin Elite Frontier (Unmatched Frontier Engines)
+globalEngineRegistry.registerEngine(globalDeepForensicEngine, {
+  capabilities: ['security', 'smart_contract', 'decompilation', 'cve']
+});
+globalEngineRegistry.registerEngine(globalBioGenomicsEngine, {
+  capabilities: ['biology', 'genomics', 'molecular', 'pharma']
+});
+globalEngineRegistry.registerEngine(globalMacroGeoEconomicEngine, {
+  capabilities: ['macroeconomics', 'geopolitics', 'central_bank', 'supply_chain']
+});
+globalEngineRegistry.registerEngine(globalAutonomousSimulationEngine, {
+  capabilities: ['simulation', 'monte_carlo', 'digital_twin', 'stress_test']
+});
 
 // Register aliases
 const audioInstance = globalEngineRegistry.getEngine('AudioEngine');

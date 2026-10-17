@@ -214,11 +214,16 @@ export async function rotateFetch(url: string, options: RequestInit = {}): Promi
     try {
       const response = await fetch(url, { ...options, headers, signal: options.signal || AbortSignal.timeout(90000) });
       
-      // If server returned quota exhaustion (429) or unauthorized (401), rotate key if custom key was used
-      if ((response.status === 429 || response.status === 401) && activeKey) {
-        console.warn(`[API KEY ROUTER] Response ${response.status} for key (${activeKey.substring(0, 6)}...). Rotating to next key...`);
-        updateKeyStatus(activeKey, response.status === 429 ? 'exhausted' : 'invalid', `HTTP ${response.status}`);
-        if (attempt < maxRetries) {
+      // If server returned quota exhaustion (429) or unauthorized (401), rotate key and retry
+      if (response.status === 429 || response.status === 401) {
+        if (activeKey) {
+          console.warn(`[API KEY ROUTER] Response ${response.status} for key (${activeKey.substring(0, 6)}...). Rotating to next key...`);
+          updateKeyStatus(activeKey, response.status === 429 ? 'exhausted' : 'invalid', `HTTP ${response.status}`);
+        }
+        const nextKey = getActiveApiKey();
+        if (attempt < maxRetries && (nextKey || attempt === 0)) {
+          console.log(`[API KEY ROUTER] Auto-recovering attempt ${attempt + 1}/${maxRetries} with key: ${nextKey ? nextKey.substring(0, 6) + '...' : 'Alternative Pool'}`);
+          await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
           continue;
         }
       }
